@@ -1,5 +1,5 @@
 {
-  "name": "chromeos-webdav-fsp",
+  "name": "chromeos-webdav",
   "version": "1.0.0",
   "private": true,
   "type": "module",

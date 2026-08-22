@@ -14,6 +14,21 @@ ChromeOS Files アプリ
              └ WebDAV サーバ (rclone / Nextcloud / Apache mod_dav / …)
 ```
 
+## 既存の実装との関係
+
+ChromeOS で WebDAV をマウントする拡張としては
+[`yoichiro/chromeos-filesystem-webdav`](https://github.com/yoichiro/chromeos-filesystem-webdav)
+が長く使われてきたが、あちらは **Manifest V2 の Chrome App** として作られている。
+Chrome App と MV2 はどちらもサポートが終了しているため、現在の ChromeOS では動かない。
+
+このプロジェクトは MV3 の拡張として書き直したもので、加えて
+
+- 開いた分だけ取りに行く Range GET (大きな動画がすぐ再生できる)
+- Cloudflare Access の背後にある共有への対応
+- 依存パッケージゼロ・ビルド不要
+
+を持つ。移植ではなくゼロから書いているので、コードの共通部分は無い。
+
 ## 必要なもの
 
 - ChromeOS (Chrome 120 以降)
