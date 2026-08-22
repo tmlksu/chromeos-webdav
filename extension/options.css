@@ -1,0 +1,108 @@
+:root {
+  color-scheme: light dark;
+  --fg: #1f1f1f;
+  --muted: #5f6368;
+  --border: #dadce0;
+  --accent: #1a73e8;
+  --error: #c5221f;
+  --ok: #188038;
+  --surface: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #3c4043;
+    --accent: #8ab4f8;
+    --error: #f28b82;
+    --ok: #81c995;
+    --surface: #202124;
+  }
+}
+
+body {
+  font: 14px/1.6 system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--surface);
+  margin: 0 auto;
+  padding: 24px;
+  max-width: 720px;
+}
+
+h1 { font-size: 20px; margin: 0 0 24px; }
+h2 { font-size: 15px; margin: 32px 0 12px; font-weight: 600; }
+
+label { display: block; margin-bottom: 16px; font-weight: 500; }
+label.checkbox { font-weight: 400; display: flex; gap: 8px; align-items: center; }
+
+input[type="text"], select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+input[type="checkbox"] { margin: 0; width: auto; }
+
+small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+.actions { display: flex; gap: 8px; }
+
+button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+button[type="submit"] { background: var(--accent); color: var(--surface); border-color: transparent; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.status { min-height: 1.6em; margin: 8px 0 0; white-space: pre-wrap; }
+.status.error { color: var(--error); }
+.status.ok { color: var(--ok); }
+.muted { color: var(--muted); }
+
+ul { list-style: none; padding: 0; margin: 0; }
+
+li {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+li .info { flex: 1; min-width: 0; }
+li .name { font-weight: 500; }
+li .url { color: var(--muted); font-size: 13px; word-break: break-all; }
+
+.badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge.mounted { color: var(--ok); border-color: currentColor; }

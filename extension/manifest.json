@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "WebDAV for Files",
+  "version": "1.0.0",
+  "description": "Mount a WebDAV share in the ChromeOS Files app and stream files on demand. Read-only.",
+  "minimum_chrome_version": "120",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "fileSystemProvider",
+    "cookies",
+    "tabs",
+    "storage"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "options_page": "options.html",
+  "file_system_provider_capabilities": {
+    "configurable": true,
+    "watchable": false,
+    "multiple_mounts": true,
+    "source": "network"
+  },
+  "action": {
+    "default_title": "WebDAV for Files の設定"
+  }
+}

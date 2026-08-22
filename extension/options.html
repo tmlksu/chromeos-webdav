@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>WebDAV for Files</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <h1>WebDAV for Files</h1>
+
+  <section>
+    <h2>共有を追加</h2>
+    <form id="share-form" autocomplete="off">
+      <label>
+        表示名
+        <input id="name" type="text" placeholder="Home NAS" required maxlength="64">
+        <small>Files アプリのサイドバーに出る名前。</small>
+      </label>
+
+      <label>
+        WebDAV の URL
+        <input id="url" type="text" placeholder="https://dav.example.com" required>
+        <small>サブパスで配信している場合は <code>https://example.com/dav</code> のように書きます。</small>
+      </label>
+
+      <label>
+        認証方式
+        <select id="auth-mode">
+          <option value="none">認証なし (VPN / Tailscale / LAN 内)</option>
+          <option value="cloudflare-access">Cloudflare Access</option>
+        </select>
+        <small id="auth-help"></small>
+      </label>
+
+      <label class="checkbox">
+        <input id="auto-mount" type="checkbox" checked>
+        ブラウザ起動時に自動でマウントする
+      </label>
+
+      <div class="actions">
+        <button type="submit" id="save">保存してマウント</button>
+        <button type="button" id="test">接続テスト</button>
+      </div>
+    </form>
+    <p id="form-status" class="status" role="status"></p>
+  </section>
+
+  <section>
+    <h2>設定済みの共有</h2>
+    <ul id="share-list"></ul>
+    <p id="empty" class="muted">まだ共有が設定されていません。</p>
+  </section>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+services:
+  rclone-webdav:
+    image: rclone/rclone:1.75.0
+    container_name: webdav-fsp
+    restart: unless-stopped
+    user: "${DAV_UID:-1000}:${DAV_GID:-1000}"
+    # 認証はこの前段 (Cloudflare Access / VPN など) に委ねる前提。
+    # 直接インターネットに出す場合は --user / --pass を足すこと。
+    command:
+      - serve
+      - webdav
+      - /data
+      - --addr=:8080
+      - --read-only
+      - --baseurl=/
+      - --log-level=INFO
+    ports:
+      - "${DAV_BIND_ADDR:-127.0.0.1}:${DAV_BIND_PORT:-8080}:8080"
+    volumes:
+      - "${DAV_SHARE_PATH:?DAV_SHARE_PATH is required}:/data:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # rclone イメージには curl/wget が無いので rclone 自身で疎通確認する
+      test: ["CMD", "rclone", "lsd", ":webdav:", "--webdav-url=http://127.0.0.1:8080", "--webdav-vendor=other", "--max-depth=1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

@@ -1,0 +1,25 @@
+# secrets / credentials
+*.pem
+*.key
+*.crt
+*.token
+token
+.env
+.env.*
+!.env.example
+secrets/
+.cloudflared/
+
+# build / deps
+node_modules/
+dist/
+*.zip
+
+# os / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# runtime
+*.log
