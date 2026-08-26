@@ -83,7 +83,9 @@ async function probe(share) {
 function describeError(error) {
   const message = String(error?.message || error);
   if (error?.status === 401 || error?.code === 'still_unauthenticated') {
-    return `${message}\n認証方式の設定を確認してください。`;
+    return authSelect.value === 'basic'
+      ? `${message}\nユーザー名とパスワードを確認してください (アプリパスワードが要るサーバもあります)。`
+      : `${message}\n認証方式の設定を確認してください。`;
   }
   if (error?.status === 404) {
     return `${message}\nURL のパス (baseurl) が合っているか確認してください。`;
