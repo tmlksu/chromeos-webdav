@@ -374,6 +374,13 @@ export class DavClient {
     return entries.filter((entry) => entry.path !== self);
   }
 
+  _rangeGet(path, range) {
+    return this.fetchImpl(this.urlFor(path), {
+      method: 'GET',
+      headers: { Range: range },
+    });
+  }
+
   /**
    * Range GET。常に offset から length バイトちょうど (またはファイル末尾まで) を返す。
    * @returns {Promise<ArrayBuffer>}
@@ -382,18 +389,30 @@ export class DavClient {
     if (length <= 0) return new ArrayBuffer(0);
 
     const end = offset + length - 1;
-    const response = await this.fetchImpl(this.urlFor(path), {
-      method: 'GET',
-      headers: { Range: `bytes=${offset}-${end}` },
-    });
+    let response = await this._rangeGet(path, `bytes=${offset}-${end}`);
 
-    if (response.status === 416) return new ArrayBuffer(0); // offset がファイル末尾を越えた
+    // ファイル末尾を跨ぐ Range を 416 で断るサーバがある (dufs で確認)。
+    // RFC 7233 は末尾で切り詰めることを求めていて rclone と Apache はそうするが、
+    // 断る側に合わせないと「ファイルの最後だけ空になる」。FSP は固定長で読むので、
+    // 最後のチャンクは必ず末尾を跨ぐ = 全ファイルで踏む。小さいファイルなら全体が空になる。
+    //
+    // 開放レンジなら同じサーバも 206 を返すので、断られたときだけ引き直す。
+    // 常に開放レンジで投げないのは、それだと残り全部 (動画なら数 GB) が飛んでくるため。
+    // ここに来た時点で残りは length 未満と分かっているので、引き直しは安全。
+    if (response.status === 416) {
+      response = await this._rangeGet(path, `bytes=${offset}-`);
+      if (response.status === 416) return new ArrayBuffer(0); // offset 自体が末尾を越えている
+    }
+
     if (!response.ok && response.status !== 206) {
       throw new DavHttpError(response.status, `GET ${path} → ${response.status}`);
     }
 
     const buffer = await response.arrayBuffer();
-    if (response.status === 206) return buffer;
+    if (response.status === 206) {
+      // 開放レンジで引き直した場合、要求より長いことがある
+      return buffer.byteLength > length ? buffer.slice(0, length) : buffer;
+    }
 
     // Range を無視して 200 で全量返すサーバ向けのフォールバック。
     return buffer.slice(Math.min(offset, buffer.byteLength), Math.min(offset + length, buffer.byteLength));

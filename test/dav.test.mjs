@@ -301,7 +301,13 @@ test('propfind: 非 2xx は DavHttpError になる', async () => {
 
 const FILE = new Uint8Array(1000).map((_, i) => i % 251);
 
-function rangeServer(body, { honorRange = true } = {}) {
+/**
+ * @param {{honorRange?: boolean, strict?: boolean}} [options]
+ *   honorRange:false — Range を無視して 200 で全量返すサーバ
+ *   strict:true      — 末尾を跨ぐ Range を切り詰めず 416 で断るサーバ (dufs で実測)。
+ *                      RFC 7233 は切り詰めを求めているが、断る実装が現実にある。
+ */
+function rangeServer(body, { honorRange = true, strict = false } = {}) {
   return mockFetch(async (url, init) => {
     if (!honorRange) {
       return {
@@ -309,10 +315,13 @@ function rangeServer(body, { honorRange = true } = {}) {
         arrayBuffer: async () => body.buffer.slice(0),
       };
     }
-    const m = /bytes=(\d+)-(\d+)/.exec(init.headers.Range);
+    const tooFar = { ok: false, status: 416, arrayBuffer: async () => new ArrayBuffer(0) };
+    const m = /bytes=(\d+)-(\d*)/.exec(init.headers.Range);
     const start = Number(m[1]);
-    const end = Number(m[2]);
-    if (start >= body.length) return { ok: false, status: 416, arrayBuffer: async () => new ArrayBuffer(0) };
+    const open = m[2] === '';
+    const end = open ? body.length - 1 : Number(m[2]);
+    if (start >= body.length) return tooFar;
+    if (strict && !open && end >= body.length) return tooFar;
     const slice = body.slice(start, Math.min(end + 1, body.length));
     return { ok: false, status: 206, arrayBuffer: async () => slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength) };
   });
@@ -365,4 +374,47 @@ test('readRange: Range を無視して 200 を返すサーバでも正しく切�
   const buf = await client.readRange('/f', 900, 100);
   assert.equal(buf.byteLength, 100);
   assert.deepEqual(new Uint8Array(buf), FILE.slice(900, 1000));
+});
+
+// --- 末尾を跨ぐ Range を 416 で断るサーバ (dufs) -----------------------------
+// FSP は固定長で読むので最後のチャンクは必ず末尾を跨ぐ。ここで空を返すと
+// 「どのファイルも末尾が欠ける」「小さいファイルは丸ごと空になる」ことになる。
+
+test('readRange: 末尾を跨ぐ Range を断るサーバでも残りを返す', async () => {
+  const client = new DavClient('https://h', rangeServer(FILE, { strict: true }));
+  const buf = await client.readRange('/f', 950, 500);
+  assert.equal(buf.byteLength, 50);
+  assert.deepEqual(new Uint8Array(buf), FILE.slice(950));
+});
+
+test('readRange: 断るサーバ + 要求がファイル全体より長い (小さいファイル)', async () => {
+  const small = new Uint8Array([1, 2, 3, 4, 5, 6]);
+  const client = new DavClient('https://h', rangeServer(small, { strict: true }));
+  const buf = await client.readRange('/f', 0, 512);
+  assert.deepEqual(new Uint8Array(buf), small);
+});
+
+test('readRange: 断るサーバでも offset が末尾以降なら空', async () => {
+  const client = new DavClient('https://h', rangeServer(FILE, { strict: true }));
+  const buf = await client.readRange('/f', 1000, 10);
+  assert.equal(buf.byteLength, 0);
+});
+
+test('readRange: 引き直しは要求した length を越えない', async () => {
+  // 開放レンジで引き直すと残り全部が返ってくることがある。length で切ること。
+  const client = new DavClient('https://h', mockFetch(async () => ({
+    ok: false, status: 206,
+    arrayBuffer: async () => FILE.buffer.slice(0), // 要求より長い 1000 バイト
+  })));
+  const buf = await client.readRange('/f', 0, 10);
+  assert.equal(buf.byteLength, 10);
+  assert.deepEqual(new Uint8Array(buf), FILE.slice(0, 10));
+});
+
+test('readRange: 断られなければ引き直さない (1 リクエストで済む)', async () => {
+  let calls = 0;
+  const inner = rangeServer(FILE);
+  const client = new DavClient('https://h', (url, init) => { calls++; return inner(url, init); });
+  await client.readRange('/f', 0, 100);
+  assert.equal(calls, 1);
 });
