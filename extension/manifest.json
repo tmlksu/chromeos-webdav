@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WebDAV for Files",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Mount a WebDAV share in the ChromeOS Files app and stream files on demand. Read-only.",
   "minimum_chrome_version": "120",
   "background": {
