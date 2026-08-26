@@ -22,6 +22,9 @@ jobs:
       # 依存パッケージが無いので npm ci は要らない
       - run: npm test
       - run: npm run check
+      # 配布 zip がその Node で作れることまで見る。Releases が唯一の配布口なので、
+      # リリースを切る日に初めて壊れていたと気付くのは避けたい。
+      - run: npm run package
 
   live:
     # 実サーバに対する結合テスト。ここで見ているのは HTTP 層 (href の往復一致・
