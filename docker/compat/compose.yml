@@ -1,0 +1,55 @@
+# 互換性検証用に、複数の WebDAV 実装を同じツリーで同時に配信する。
+#
+#   bash test/tools/compat.sh
+#
+# 本番用ではない (docker/docker-compose.yml がそちら)。
+# ここで見ているのは拡張の HTTP 層だけなので ChromeOS は要らない。
+# ポートは 1808x 帯。docker/docker-compose.yml の 8080 とぶつからないようにしてある。
+
+x-share: &share
+  volumes:
+    - "${DAV_SHARE_PATH:?DAV_SHARE_PATH is required}:/data:ro"
+
+services:
+  rclone:
+    # 基準。README が実機で確認済みとしている実装。
+    image: rclone/rclone:1.75.0
+    <<: *share
+    command: [serve, webdav, /data, --addr=:8080, --read-only, --baseurl=/]
+    ports: ["127.0.0.1:18081:8080"]
+
+  apache:
+    # mod_dav。名前空間プレフィックスに lp1: を使う唯一の実装で、
+    # dav.js のプレフィックス非依存パースが本当に効くかはここでしか確かめられない。
+    image: httpd:2.4
+    volumes:
+      - "${DAV_SHARE_PATH}:/usr/local/apache2/htdocs:ro"
+      - "./apache-dav.conf:/usr/local/apache2/conf/extra/dav.conf:ro"
+    command: [httpd-foreground, -c, "Include conf/extra/dav.conf"]
+    ports: ["127.0.0.1:18082:80"]
+
+  dufs:
+    # href で [ ] をパーセントエンコードする。また末尾を跨ぐ Range を
+    # 切り詰めず 416 で断る (RFC 7233 は切り詰めを求めている)。
+    image: sigoden/dufs:latest
+    <<: *share
+    command: [/data]
+    ports: ["127.0.0.1:18083:5000"]
+
+  hacdias:
+    image: hacdias/webdav:latest
+    volumes:
+      - "${DAV_SHARE_PATH}:/data:ro"
+      - "./hacdias.yml:/config.yml:ro"
+    command: [-c, /config.yml]
+    ports: ["127.0.0.1:18084:6065"]
+
+  nginx:
+    # 組み込みの ngx_http_dav_module は PROPFIND を持たない (dav_ext が要る)。
+    # 動かない構成をあえて 1 つ置いて、405 の切り分け (docs/troubleshooting.md) の
+    # 裏付けが実測のまま残るようにしている。
+    image: nginx:alpine
+    volumes:
+      - "${DAV_SHARE_PATH}:/data:ro"
+      - "./nginx-dav.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports: ["127.0.0.1:18085:80"]

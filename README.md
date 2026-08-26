@@ -80,11 +80,35 @@ URL を入力して保存すると、そのオリジンへのアクセス許可�
 
 ## 動作確認済みのサーバ
 
-| サーバ | 状況 |
-| --- | --- |
-| `rclone serve webdav` | 実機で確認済み (直接 / Cloudflare Access 経由の両方) |
+確認は 2 段階に分かれる。
 
-他の WebDAV 実装で試したら、ぜひ結果を issue で教えてほしい。
+- **プロトコル層** — PROPFIND の解釈、href の往復一致、Range GET。
+  `test/live.mjs` が実サーバに対して確かめる。ChromeOS も chrome API も要らないので
+  Docker で複数実装を立てて自動で回している
+- **Files アプリ** — 実際にマウントして開けるか。Chromebook が要る
+
+| サーバ | プロトコル層 | Files アプリ |
+| --- | --- | --- |
+| `rclone serve webdav` | 66/66 | 確認済み (直接 / Cloudflare Access 経由の両方) |
+| Apache `mod_dav` | 66/66 | 未確認 |
+| [dufs](https://github.com/sigoden/dufs) | 66/66 | 未確認 |
+| [hacdias/webdav](https://github.com/hacdias/webdav) | 66/66 | 未確認 |
+| nginx (組み込み `dav` モジュール) | **対象外** | — |
+
+nginx の組み込み `ngx_http_dav_module` には PROPFIND が無く、書き込み系メソッドしか持たない。
+`nginx-dav-ext-module` を足さないと WebDAV にはならない (PROPFIND が 405 になる)。
+
+Nextcloud や Synology WebDAV Server は Basic 認証を要求するので、
+拡張が対応するまで表に入れられない ([未対応](#未対応))。
+
+手元で全部流せる:
+
+```bash
+npm run test:compat            # docker で上の実装を立てて結合テストを流す
+npm run test:compat -- dufs    # 1 つだけ
+```
+
+他の WebDAV 実装で試したら、ぜひ結果を issue で教えてほしい。表に足す。
 `node test/live.mjs <URL>` を自分のサーバに向けるだけで確認できる。
 
 ## 開発
@@ -95,6 +119,7 @@ npm run check   # 構文チェック + manifest.json の妥当性
 npm run package # dist/webdav-for-files-<version>.zip を作る
 
 npm run fixtures            # fixture を rclone の実出力から再生成する
+npm run test:compat         # 複数の WebDAV 実装に対する互換テスト (docker)
 node test/live.mjs <URL>    # 稼働中のサーバに対する結合テスト
 ```
 
@@ -136,6 +161,13 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
   href と往復一致していないと「一覧には出るが開けない」状態になる。
   サーバによって `+` `=` `'` `(` `~` をエンコードするかどうかが違うので、
   ここは実サーバで往復を確かめる価値がある (`test/live.mjs` がやっている)。
+- **末尾を跨ぐ Range を 416 で断るサーバがある**。RFC 7233 はサーバ側に
+  末尾での切り詰めを求めていて rclone と Apache はそうするが、dufs は断る。
+  FSP は固定長で読むので**最後のチャンクは必ず末尾を跨ぐ** —
+  つまり全ファイルで踏み、1 チャンクより小さいファイルは丸ごと空になる。
+  断られたときだけ開放レンジ `bytes=N-` で引き直している。常に開放レンジで
+  投げないのは、それだと残り全部 (動画なら数 GB) が飛んできて
+  ストリーミングにならないため。
 - **Access の失効判定はリダイレクトと 401 のみ**。非 2xx すべてを失効とみなすと、
   404 (存在しないファイル) や 403 (ポリシー拒否) のたびにログインタブが暴発する。
   404 → `NOT_FOUND`、403 → `ACCESS_DENIED` に写像し、

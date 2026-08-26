@@ -1,0 +1,28 @@
+name: compat
+
+# 複数の WebDAV 実装に対する互換テスト。5 つコンテナを立てるので
+# 毎 push では回さず、週 1 と手動実行にしている。
+# README の「動作確認済みのサーバ」表がいつの間にか嘘になるのを防ぐのが目的。
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  compat:
+    name: compat matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 検証用ツリーを作る
+        run: |
+          bash test/tools/make-tree.sh "$RUNNER_TEMP/davtree"
+          echo "DAV_SHARE_PATH=$RUNNER_TEMP/davtree" >> "$GITHUB_ENV"
+      - name: 互換テスト
+        run: npm run test:compat
+      - name: コンテナのログ (失敗時)
+        if: failure()
+        run: docker compose -f docker/compat/compose.yml logs
