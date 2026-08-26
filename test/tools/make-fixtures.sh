@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # テスト用 fixture を再生成する。
-# パーセントエンコードで問題になりやすい名前を並べた合成ディレクトリを作り、
-# 実際の rclone serve webdav の PROPFIND 出力を保存する。
+# make-tree.sh の検証用ツリーを rclone serve webdav で配信し、
+# その実際の PROPFIND 出力を保存する (ツリーの定義は make-tree.sh 側)。
 #
 #   bash test/tools/make-fixtures.sh
 #
@@ -16,21 +16,7 @@ OUT="$(cd "$(dirname "$0")/../fixtures" && pwd)"
 cleanup() { [[ -n "${RCLONE_PID:-}" ]] && kill "$RCLONE_PID" 2>/dev/null || true; rm -rf "$SHARE"; }
 trap cleanup EXIT
 
-mkdir -p "$SHARE"/{"画像","ドキュメント & メモ","My Documents","nested/deep dir","100% done"}
-cd "$SHARE"
-printf 'hello\n'  > "readme.txt"
-printf 'plus\n'   > "a+b=c.txt"
-printf 'pct\n'    > "100% progress.md"
-printf 'quote\n'  > "it's here.txt"
-printf 'brk\n'    > "[draft] notes.txt"
-printf 'tilde\n'  > "~backup~.txt"
-printf 'hash\n'   > "report #3 (final).md"
-printf 'amp\n'    > "rock & roll.txt"
-printf 'jp\n'     > "画像/写真 001.jpg"
-printf 'jp2\n'    > "ドキュメント & メモ/議事録 2026-01.txt"
-printf 'emoji\n'  > "émoji 🎵 track.mp3"
-printf 'deep\n'   > "nested/deep dir/leaf.txt"
-python3 -c "open('sample-media.bin','wb').write(bytes((i*7 + (i//251)*13) % 256 for i in range(2*1024*1024)))"
+bash "$(dirname "$0")/make-tree.sh" "$SHARE" >/dev/null
 
 rclone serve webdav "$SHARE" --addr "127.0.0.1:$PORT" --read-only >/dev/null 2>&1 &
 RCLONE_PID=$!

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: unit (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # 依存パッケージが無いので npm ci は要らない
+      - run: npm test
+      - run: npm run check
+
+  live:
+    # 実サーバに対する結合テスト。ここで見ているのは HTTP 層 (href の往復一致・
+    # Range GET の 206・複数 propstat) で、ChromeOS も chrome API も要らない。
+    name: live (rclone)
+    runs-on: ubuntu-latest
+    env:
+      DAV_SHARE_PATH: ${{ runner.temp }}/davtree
+      COMPOSE: docker/docker-compose.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 検証用ツリーを作る
+        run: |
+          bash test/tools/make-tree.sh "$DAV_SHARE_PATH"
+          # compose の user: は既定 1000:1000。runner の uid は違うので合わせる
+          echo "DAV_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "DAV_GID=$(id -g)" >> "$GITHUB_ENV"
+
+      - name: rclone serve webdav を起動
+        run: |
+          docker compose -f "$COMPOSE" up -d
+          for _ in $(seq 1 30); do
+            if curl -sf -o /dev/null --max-time 1 -X PROPFIND http://127.0.0.1:8080/ -H "Depth: 0"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::WebDAV サーバが 30 秒以内に応答しなかった"
+          docker compose -f "$COMPOSE" logs
+          exit 1
+
+      - name: Range GET が 206 で返ること
+        # ここが 200 になる構成では拡張は動くが全量転送になる。
+        # live.mjs より前に、単独の要件として確かめておく。
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -r 0-1023 http://127.0.0.1:8080/sample-media.bin)
+          echo "Range GET -> $code"
+          [ "$code" = "206" ]
+
+      - name: 結合テスト
+        run: node test/live.mjs http://127.0.0.1:8080
+
+      - name: サーバログ (失敗時)
+        if: failure()
+        run: docker compose -f "$COMPOSE" logs

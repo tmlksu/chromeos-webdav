@@ -1,5 +1,7 @@
 # WebDAV for Files (ChromeOS)
 
+[![CI](https://github.com/tmlksu/chromeos-webdav/actions/workflows/ci.yml/badge.svg)](https://github.com/tmlksu/chromeos-webdav/actions/workflows/ci.yml)
+
 WebDAV 共有を ChromeOS の Files アプリにマウントする Chrome 拡張。
 `chrome.fileSystemProvider` を使い、**開いた分だけ Range GET で取りに行く**ので、
 大きな動画も全量ダウンロードを待たずに再生が始まる。
@@ -97,6 +99,14 @@ node test/live.mjs <URL>    # 稼働中のサーバに対する結合テスト
 ```
 
 依存パッケージは無い (`npm install` 不要)。Node 20 以降。
+
+CI が流しているものは手元でもそのまま再現できる。ChromeOS も chrome API も要らない:
+
+```bash
+bash test/tools/make-tree.sh /tmp/davtree     # 意地悪な名前を並べた検証用ツリー
+DAV_SHARE_PATH=/tmp/davtree docker compose -f docker/docker-compose.yml up -d
+node test/live.mjs http://127.0.0.1:8080
+```
 
 `test/live.mjs` はサーバ固有の前提を置かない。ツリーを歩いて、
 一覧で得たパスをそのまま引き直せるか、Range GET が全量 GET と一致するかを確かめる。
