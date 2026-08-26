@@ -72,6 +72,10 @@ it actually needs).
 
 You can register several shares; each appears as its own drive in the Files app.
 
+**To change a share's settings**, add it again with the same URL. A share's id
+is derived deterministically from its URL, so the same URL replaces the existing
+entry rather than duplicating it. Changing a password works the same way.
+
 ### Auth modes
 
 **No auth** — connects to the server directly. Only use this when the server is
