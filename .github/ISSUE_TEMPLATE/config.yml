@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting
+    url: https://github.com/tmlksu/chromeos-webdav/blob/main/docs/troubleshooting.md
+    about: Mount failures, entries that list but won't open, full downloads instead of streaming, looping login tabs (Japanese)

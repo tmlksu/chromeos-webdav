@@ -1,0 +1,69 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: [docs/troubleshooting.md](https://github.com/tmlksu/chromeos-webdav/blob/main/docs/troubleshooting.md)
+        covers the common cases (mount fails, entries list but won't open, videos
+        download in full, login tab loops). It's in Japanese.
+
+        日本語で書いてもらって構いません。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a share for https://…
+        2. Open it in the Files app
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: ChromeOS version and extension version
+      placeholder: "ChromeOS 141.0.7390.60 / extension 1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: WebDAV server
+      placeholder: "rclone serve webdav 1.75.0, behind Cloudflare Access"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Service worker console log
+      description: |
+        `chrome://extensions` → **service worker** under this extension → Console.
+        The extension logs every failed handler with its arguments.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: live
+    attributes:
+      label: Output of `node test/live.mjs <URL>`
+      description: |
+        Optional, but it separates "the server behaves unusually" from "the
+        extension is wrong" faster than anything else.
+      render: text
+    validations:
+      required: false
