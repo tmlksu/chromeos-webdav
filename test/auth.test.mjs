@@ -7,6 +7,10 @@ import assert from 'node:assert/strict';
 import {
   AccessAuth,
   AccessAuthError,
+  BasicAuth,
+  BasicAuthError,
+  basicCredentials,
+  createAuth,
   isAuthExpired,
   cookieDomainMatches,
   ACCESS_COOKIE,
@@ -257,4 +261,74 @@ test('fetch は credentials:include / redirect:manual を必ず付ける', async
   assert.equal(seen.redirect, 'manual');
   assert.equal(seen.method, 'PROPFIND');
   assert.equal(seen.headers.Depth, '1');
+});
+
+// --- Basic 認証 --------------------------------------------------------------
+
+/** 渡された init を記録して、指定のレスポンスを返す fetch。 */
+function recordingFetch(response = { ok: true, status: 207, url: `${ORIGIN}/` }) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return typeof response === 'function' ? response(url, init) : response;
+  };
+  return { calls, fetchImpl };
+}
+
+test('basicCredentials: RFC 7617 の base64', () => {
+  assert.equal(basicCredentials('Aladdin', 'open sesame'), 'QWxhZGRpbjpvcGVuIHNlc2FtZQ==');
+});
+
+test('basicCredentials: 非 ASCII は UTF-8 で符号化する (btoa に直接渡すと落ちる)', () => {
+  const encoded = basicCredentials('ユーザー', 'パスワード');
+  const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+  assert.equal(decoded, 'ユーザー:パスワード');
+});
+
+test('basicCredentials: パスワード空でも : は残る', () => {
+  assert.equal(Buffer.from(basicCredentials('token', ''), 'base64').toString('utf8'), 'token:');
+});
+
+test('BasicAuth: Authorization を付け、cookie は送らない', async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const auth = new BasicAuth(ORIGIN, { username: 'u', password: 'p', deps: { fetch: fetchImpl } });
+
+  await auth.fetch(`${ORIGIN}/dir`, { method: 'PROPFIND', headers: { Depth: '1' } });
+
+  const { init } = calls[0];
+  assert.equal(init.headers.Authorization, `Basic ${basicCredentials('u', 'p')}`);
+  assert.equal(init.headers.Depth, '1', '元のヘッダを消さない');
+  assert.equal(init.method, 'PROPFIND');
+  assert.equal(init.credentials, 'omit');
+});
+
+test('BasicAuth: 別オリジンへのリダイレクト先は弾く (資格情報の漏洩を避ける)', async () => {
+  const { fetchImpl } = recordingFetch({ ok: true, status: 200, url: 'https://evil.example.net/' });
+  const auth = new BasicAuth(ORIGIN, { username: 'u', password: 'p', deps: { fetch: fetchImpl } });
+  await assert.rejects(() => auth.fetch(`${ORIGIN}/dir`), BasicAuthError);
+});
+
+test('BasicAuth: 同一オリジン内のリダイレクトは通す', async () => {
+  const { fetchImpl } = recordingFetch({ ok: true, status: 207, url: `${ORIGIN}/dir/` });
+  const auth = new BasicAuth(ORIGIN, { username: 'u', password: 'p', deps: { fetch: fetchImpl } });
+  const response = await auth.fetch(`${ORIGIN}/dir`);
+  assert.equal(response.status, 207);
+});
+
+test('BasicAuth: ensureAuthenticated は通信しない', async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const auth = new BasicAuth(ORIGIN, { username: 'u', password: 'p', deps: { fetch: fetchImpl } });
+  assert.equal(await auth.ensureAuthenticated(), true);
+  assert.equal(calls.length, 0);
+});
+
+test('createAuth: authMode basic で BasicAuth を返し、資格情報を渡す', async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const auth = createAuth(
+    { url: ORIGIN, authMode: 'basic', username: 'u', password: 'p' },
+    { deps: { fetch: fetchImpl } },
+  );
+  assert.ok(auth instanceof BasicAuth);
+  await auth.fetch(`${ORIGIN}/`);
+  assert.equal(calls[0].init.headers.Authorization, `Basic ${basicCredentials('u', 'p')}`);
 });

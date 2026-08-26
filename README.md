@@ -77,6 +77,14 @@ You can register several shares; each appears as its own drive in the Files app.
 **No auth** — connects to the server directly. Only use this when the server is
 **protected at the network layer**: Tailscale, WireGuard, a LAN, and so on.
 
+**Basic auth** — for servers that hold their own username and password
+(Nextcloud, Synology WebDAV Server, `dufs --auth`, and so on).
+
+The credentials are **stored in cleartext** in `chrome.storage.local`. No other
+extension can read them, but they are not encrypted on disk. Because of that they
+can only be set on an `https://` share. If your server can issue app passwords
+(Nextcloud can), use one of those rather than your account password.
+
 **Cloudflare Access** — for servers behind a
 [self-hosted application](docs/cloudflare-access.md) (the doc is in Japanese).
 When the session expires the extension opens a login tab, detects that the
@@ -94,19 +102,24 @@ Verification splits in two.
   and checked automatically.
 - **Files app** — whether it actually mounts and opens. This needs a Chromebook.
 
-| Server | Protocol layer | Files app |
-| --- | --- | --- |
-| `rclone serve webdav` | 66/66 | verified (both directly and via Cloudflare Access) |
-| Apache `mod_dav` | 66/66 | not checked |
-| [dufs](https://github.com/sigoden/dufs) | 66/66 | not checked |
-| [hacdias/webdav](https://github.com/hacdias/webdav) | 66/66 | not checked |
-| nginx (built-in `dav` module) | **not supported** | — |
+| Server | Auth | Protocol layer | Files app |
+| --- | --- | --- | --- |
+| `rclone serve webdav` | none | 66/66 | verified (both directly and via Cloudflare Access) |
+| Apache `mod_dav` | none | 66/66 | not checked |
+| [dufs](https://github.com/sigoden/dufs) | none / Basic | 66/66 | not checked |
+| [hacdias/webdav](https://github.com/hacdias/webdav) | none | 66/66 | not checked |
+| [Nextcloud](https://nextcloud.com/) | Basic | 149/149 | not checked |
+| nginx (built-in `dav` module) | — | **not supported** | — |
+
+Nextcloud exercises two paths the others don't: it requires Basic auth, and it
+serves from a subpath (`/remote.php/dav/files/<user>`), so the baseurl handling
+goes through it too.
 
 nginx's built-in `ngx_http_dav_module` has no PROPFIND — only the writing
 methods. Without `nginx-dav-ext-module` it isn't WebDAV, and PROPFIND returns 405.
 
-Nextcloud and Synology WebDAV Server require Basic auth, so they can't go in the
-table until the extension supports it (see [Not implemented](#not-implemented)).
+Synology WebDAV Server is untested for lack of hardware, but should work over
+Basic auth.
 
 You can run the whole set locally:
 
@@ -200,6 +213,12 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
 - **`fileSystemId` is derived deterministically from the URL.** Removing a share
   and adding it back produces the same id, so it can't disagree with mount state
   left over on the ChromeOS side.
+- **Basic auth credentials can only be held in cleartext.** An extension has no
+  storage keyed to the user, so encrypting them would mean keeping the key in the
+  same place. Rather than obfuscate and look safe, the settings page says plainly
+  that they are stored in cleartext and the mode is restricted to `https://`.
+  A redirect to another origin is rejected, since `fetch` does not drop the
+  Authorization header across one.
 - **`host_permissions` are optional.** MV3 can't change static `host_permissions`
   at runtime, so this uses `optional_host_permissions` plus
   `chrome.permissions.request()` from the settings page. That call requires a
@@ -209,7 +228,7 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
 
 - Writing (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
 - Thumbnails (`thumbnail` in `onGetMetadataRequested`)
-- Basic auth / bearer tokens
+- Bearer tokens
 - File watching (`watchable`)
 
 ## Documentation

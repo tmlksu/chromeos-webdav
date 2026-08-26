@@ -14,16 +14,23 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 COMPOSE="$ROOT/docker/compat/compose.yml"
 export DAV_SHARE_PATH="${DAV_SHARE_PATH:-$(mktemp -d)}"
 
-# name port kind
+# name port kind auth path
 #   kind=dav         … 結合テストが全通過するべき
 #   kind=no-propfind … WebDAV ではない構成。PROPFIND が 405 で断られることを確かめる
+#   auth             … '-' か 'user:pass'。指定すると live.mjs を Basic 認証で流す
+#   path             … '-' か baseurl。サブパスで配信している実装向け
 SERVERS=(
-  "rclone   18081 dav"
-  "apache   18082 dav"
-  "dufs     18083 dav"
-  "hacdias  18084 dav"
-  "nginx    18085 no-propfind"
+  "rclone    18081 dav          -                   -"
+  "apache    18082 dav          -                   -"
+  "dufs      18083 dav          -                   -"
+  "hacdias   18084 dav          -                   -"
+  "dufs-auth 18086 dav          dav:s3cret          -"
+  "nextcloud 18087 dav          dav:s3cret-compat-only /remote.php/dav/files/dav"
+  "nginx     18085 no-propfind  -                   -"
 )
+
+# nextcloud は初回起動でインストールが走る。他は数秒で立つが、ここだけ待たされる。
+READY_TIMEOUT="${READY_TIMEOUT:-240}"
 
 WANT=("$@")
 selected() {
@@ -46,7 +53,7 @@ echo "共有ツリー: $DAV_SHARE_PATH"
 
 services=()
 for row in "${SERVERS[@]}"; do
-  read -r name _ _ <<<"$row"
+  read -r name _ _ _ _ <<<"$row"
   selected "$name" && services+=("$name")
 done
 [[ ${#services[@]} -eq 0 ]] && { echo "対象がない"; exit 1; }
@@ -61,24 +68,44 @@ status_of() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$@"; }
 results=()
 failed=0
 for row in "${SERVERS[@]}"; do
-  read -r name port kind <<<"$row"
+  read -r name port kind auth path <<<"$row"
   selected "$name" || continue
 
-  # 何かしら応答するようになるまで待つ (PROPFIND を持たない構成もあるので GET で見る)
+  curl_auth=()
+  live_env=()
+  if [[ "$auth" != "-" ]]; then
+    curl_auth=(-u "$auth")
+    live_env=(DAV_USER="${auth%%:*}" DAV_PASS="${auth#*:}")
+  fi
+  [[ "$path" == "-" ]] && path=""
+  base="http://127.0.0.1:$port$path"
+
+  # これから実際に投げるものが通るようになるまで待つ。
+  # 「何か応答した」で先に進むと、nextcloud のインストール中の 503 を掴んでしまう。
   ready=""
-  for _ in $(seq 1 40); do
-    code=$(status_of "http://127.0.0.1:$port/")
-    [[ "$code" != "000" ]] && { ready=1; break; }
+  for _ in $(seq 1 "$READY_TIMEOUT"); do
+    if [[ "$kind" == "dav" ]]; then
+      code=$(status_of "${curl_auth[@]}" -X PROPFIND "$base/" -H "Depth: 0")
+      [[ "$code" == "207" ]] && { ready=1; break; }
+    else
+      code=$(status_of "${curl_auth[@]}" "$base/")
+      [[ "$code" != "000" ]] && { ready=1; break; }
+    fi
     sleep 1
   done
   if [[ -z "$ready" ]]; then
-    results+=("$name|起動せず|-|-")
+    results+=("$name|起動せず (最後の応答 $code)|-|-")
     failed=1
     continue
   fi
 
-  propfind=$(status_of -X PROPFIND "http://127.0.0.1:$port/" -H "Depth: 1")
-  range=$(status_of -r 0-1023 "http://127.0.0.1:$port/sample-media.bin")
+  propfind=$(status_of "${curl_auth[@]}" -X PROPFIND "$base/" -H "Depth: 1")
+  # nextcloud は自前のストレージなので共有ツリーのファイルは無い。
+  # Range の単独確認は共有ツリーを配信している実装だけで行う (live.mjs が全実装で見る)。
+  range="-"
+  if [[ "$name" != "nextcloud" ]]; then
+    range=$(status_of "${curl_auth[@]}" -r 0-1023 "$base/sample-media.bin")
+  fi
 
   if [[ "$kind" == "no-propfind" ]]; then
     # 動かないことを確かめる方の行。405 以外が返るなら前提が変わっている
@@ -91,7 +118,7 @@ for row in "${SERVERS[@]}"; do
     continue
   fi
 
-  out=$(node "$ROOT/test/live.mjs" "http://127.0.0.1:$port" 2>&1)
+  out=$(env "${live_env[@]}" node "$ROOT/test/live.mjs" "$base" 2>&1)
   checks=$(grep -oP 'チェック数: \K\d+' <<<"$out" | tail -1)
   if grep -q "すべて合格" <<<"$out"; then
     results+=("$name|合格 (${checks:-?} 件)|$propfind|$range")
@@ -106,11 +133,11 @@ done
 
 # 日本語を含む列は printf の桁数がバイト数で数えられて揃わないので、最後に置く
 echo
-printf '%-10s %-9s %-10s %s\n' "server" "PROPFIND" "Range GET" "結合テスト"
-printf '%-10s %-9s %-10s %s\n' "----------" "--------" "---------" "----------"
+printf '%-11s %-9s %-10s %s\n' "server" "PROPFIND" "Range GET" "結合テスト"
+printf '%-11s %-9s %-10s %s\n' "-----------" "--------" "---------" "----------"
 for r in "${results[@]}"; do
   IFS='|' read -r a b c d <<<"$r"
-  printf '%-10s %-9s %-10s %s\n' "$a" "$c" "$d" "$b"
+  printf '%-11s %-9s %-10s %s\n' "$a" "$c" "$d" "$b"
 done
 
 exit $failed

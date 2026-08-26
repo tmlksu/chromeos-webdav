@@ -4,10 +4,14 @@
  * (storage は依存注入で差し替える)。
  */
 
-export const AUTH_MODES = /** @type {const} */ (['none', 'cloudflare-access']);
+export const AUTH_MODES = /** @type {const} */ (['none', 'basic', 'cloudflare-access']);
 export const STORAGE_KEY = 'shares';
 
-/** @typedef {{id: string, name: string, url: string, authMode: 'none'|'cloudflare-access', autoMount: boolean}} Share */
+/**
+ * @typedef {{id: string, name: string, url: string,
+ *            authMode: 'none'|'basic'|'cloudflare-access',
+ *            username?: string, password?: string, autoMount: boolean}} Share
+ */
 
 /**
  * 入力 URL を正規化する。末尾スラッシュを落とし、既定ポートを畳む。
@@ -89,18 +93,35 @@ export function validateShare(input) {
     errors.push('Cloudflare Access は https でのみ使えます');
   }
 
+  const username = String(input?.username || '');
+  const password = String(input?.password || '');
+  if (authMode === 'basic') {
+    // http:// では資格情報が平文で流れる。設定させない。
+    if (url && url.startsWith('http://')) {
+      errors.push('Basic 認証は https でのみ使えます (http では資格情報が平文で流れます)');
+    }
+    if (!username) errors.push('ユーザー名を入力してください');
+    // パスワードが空の構成 (ユーザー名にトークンを入れる方式) はあるので必須にしない
+    if (username.includes(':')) {
+      // RFC 7617 は user-id に ':' を許さない。ここで弾かないと分割位置が壊れる
+      errors.push('ユーザー名に : は使えません');
+    }
+  }
+
   if (errors.length) return { share: null, errors };
 
-  return {
-    share: {
-      id: shareIdFor(url),
-      name,
-      url,
-      authMode,
-      autoMount: input?.autoMount !== false,
-    },
-    errors: [],
+  const share = {
+    id: shareIdFor(url),
+    name,
+    url,
+    authMode,
+    autoMount: input?.autoMount !== false,
   };
+  if (authMode === 'basic') {
+    share.username = username;
+    share.password = password;
+  }
+  return { share, errors: [] };
 }
 
 /** chrome.storage.local を薄く包む。テストではメモリ実装を渡す。 */

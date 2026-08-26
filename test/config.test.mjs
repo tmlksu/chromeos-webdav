@@ -81,7 +81,7 @@ test('validateShare: 表示名と URL の不備を報告する', () => {
   assert.match(validateShare({ name: '', url: 'https://a.example.com' }).errors.join(), /表示名/);
   assert.match(validateShare({ name: 'x'.repeat(65), url: 'https://a.example.com' }).errors.join(), /64/);
   assert.match(validateShare({ name: 'x', url: 'ftp://a' }).errors.join(), /http/);
-  assert.match(validateShare({ name: 'x', url: 'https://a', authMode: 'basic' }).errors.join(), /未知の認証方式/);
+  assert.match(validateShare({ name: 'x', url: 'https://a', authMode: 'digest' }).errors.join(), /未知の認証方式/);
 });
 
 test('validateShare: Cloudflare Access を http に設定させない', () => {
@@ -127,4 +127,42 @@ test('ShareStore: 同じ URL の再保存は重複せず上書きされる', asy
 test('ShareStore: 壊れた保存データでも落ちない', async () => {
   assert.deepEqual(await new ShareStore(memoryStorage({ [STORAGE_KEY]: 'garbage' })).list(), []);
   assert.deepEqual(await new ShareStore(memoryStorage({})).list(), []);
+});
+
+// --- Basic 認証 --------------------------------------------------------------
+
+test('validateShare: Basic 認証はユーザー名が要る', () => {
+  const { errors } = validateShare({ name: 'x', url: 'https://a.example.com', authMode: 'basic' });
+  assert.match(errors.join(), /ユーザー名/);
+});
+
+test('validateShare: Basic 認証はパスワード空を許す (ユーザー名がトークンの構成)', () => {
+  const { share, errors } = validateShare({
+    name: 'x', url: 'https://a.example.com', authMode: 'basic', username: 'token',
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(share.username, 'token');
+  assert.equal(share.password, '');
+});
+
+test('validateShare: Basic 認証を http に設定させない', () => {
+  const { errors } = validateShare({
+    name: 'x', url: 'http://a.example.com', authMode: 'basic', username: 'u', password: 'p',
+  });
+  assert.match(errors.join(), /https/);
+});
+
+test('validateShare: ユーザー名に : は使えない (RFC 7617)', () => {
+  const { errors } = validateShare({
+    name: 'x', url: 'https://a.example.com', authMode: 'basic', username: 'a:b', password: 'p',
+  });
+  assert.match(errors.join(), /:/);
+});
+
+test('validateShare: Basic 以外では資格情報を保存しない', () => {
+  const { share } = validateShare({
+    name: 'x', url: 'https://a.example.com', authMode: 'none', username: 'u', password: 'p',
+  });
+  assert.equal(share.username, undefined);
+  assert.equal(share.password, undefined);
 });

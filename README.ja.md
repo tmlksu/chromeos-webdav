@@ -74,6 +74,14 @@ URL を入力して保存すると、そのオリジンへのアクセス許可�
 **認証なし** — サーバに直接つなぐ。Tailscale / WireGuard / LAN 内など、
 **ネットワーク層で守られている場合にだけ**使うこと。
 
+**Basic 認証** — サーバ自身がユーザー名とパスワードを持っている構成向け
+(Nextcloud、Synology WebDAV Server、`dufs --auth` など)。
+
+資格情報は `chrome.storage.local` に**平文で保存される**。他の拡張機能からは
+読めないが、ディスク上は暗号化されない。そのため **`https://` の共有にしか設定できない**。
+アプリパスワードを発行できるサーバでは、アカウント本体のパスワードではなく
+そちらを使うこと。
+
 **Cloudflare Access** — [self-hosted アプリケーション](docs/cloudflare-access.md)で
 守られたサーバ向け。セッションが切れると自動でログインタブを開き、
 `CF_Authorization` cookie が設置されたのを検知してタブを閉じ、
@@ -89,19 +97,22 @@ URL を入力して保存すると、そのオリジンへのアクセス許可�
   Docker で複数実装を立てて自動で回している
 - **Files アプリ** — 実際にマウントして開けるか。Chromebook が要る
 
-| サーバ | プロトコル層 | Files アプリ |
-| --- | --- | --- |
-| `rclone serve webdav` | 66/66 | 確認済み (直接 / Cloudflare Access 経由の両方) |
-| Apache `mod_dav` | 66/66 | 未確認 |
-| [dufs](https://github.com/sigoden/dufs) | 66/66 | 未確認 |
-| [hacdias/webdav](https://github.com/hacdias/webdav) | 66/66 | 未確認 |
-| nginx (組み込み `dav` モジュール) | **対象外** | — |
+| サーバ | 認証 | プロトコル層 | Files アプリ |
+| --- | --- | --- | --- |
+| `rclone serve webdav` | なし | 66/66 | 確認済み (直接 / Cloudflare Access 経由の両方) |
+| Apache `mod_dav` | なし | 66/66 | 未確認 |
+| [dufs](https://github.com/sigoden/dufs) | なし / Basic | 66/66 | 未確認 |
+| [hacdias/webdav](https://github.com/hacdias/webdav) | なし | 66/66 | 未確認 |
+| [Nextcloud](https://nextcloud.com/) | Basic | 149/149 | 未確認 |
+| nginx (組み込み `dav` モジュール) | — | **対象外** | — |
+
+Nextcloud は他と踏む経路が違う。Basic 認証が必須で、かつサブパス配信
+(`/remote.php/dav/files/<user>`) なので baseurl の処理も同時に通る。
 
 nginx の組み込み `ngx_http_dav_module` には PROPFIND が無く、書き込み系メソッドしか持たない。
 `nginx-dav-ext-module` を足さないと WebDAV にはならない (PROPFIND が 405 になる)。
 
-Nextcloud や Synology WebDAV Server は Basic 認証を要求するので、
-拡張が対応するまで表に入れられない ([未対応](#未対応))。
+Synology WebDAV Server は手元に実機が無いので未検証。Basic 認証で動くはず。
 
 手元で全部流せる:
 
@@ -190,6 +201,10 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
   ハンドラ内で遅延復元する。
 - **`fileSystemId` は URL から決定的に導出**する。設定を消して足し直しても
   同じ id になるので、ChromeOS 側に残ったマウント状態と食い違わない。
+- **Basic 認証の資格情報は平文で持つしかない**。拡張には「ユーザーに紐づく鍵で
+  暗号化する」ような保存先が無く、何かで暗号化してもその鍵を同じ場所に置くことになる。
+  難読化して安全に見せるより、設定画面に平文と明記して `https://` に限定するほうが誠実。
+  リダイレクト先が別オリジンなら弾いている (`fetch` は Authorization を落とさないため)。
 - **`host_permissions` は optional**。MV3 では静的な `host_permissions` を
   実行時に変えられないため、`optional_host_permissions` + 設定画面からの
   `chrome.permissions.request()` にしている。ユーザー操作が要るので、
@@ -199,7 +214,7 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
 
 - 書き込み (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
 - サムネイル (`onGetMetadataRequested` の `thumbnail`)
-- Basic 認証 / Bearer トークン
+- Bearer トークン
 - ファイル監視 (`watchable`)
 
 ## ライセンス
