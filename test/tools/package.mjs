@@ -5,7 +5,11 @@ import { join, relative } from 'node:path';
 import { deflateRawSync, crc32 } from 'node:zlib';
 
 const SRC = 'extension';
-const OUT = 'dist/webdav-for-files.zip';
+
+// 配布物には版を入れる。リリースに複数版が並んだとき、
+// ファイル名が同じだと手元に落とした zip がどれか分からなくなる。
+const { version } = JSON.parse(await readFile(join(SRC, 'manifest.json'), 'utf8'));
+const OUT = `dist/webdav-for-files-${version}.zip`;
 
 async function walk(dir) {
   const out = [];
@@ -18,6 +22,12 @@ async function walk(dir) {
   }
   return out;
 }
+
+// zip のタイムスタンプは 1980-01-01 固定。
+// (a) 0 埋めだと月 0 / 日 0 という不正な日付になる
+// (b) 固定すると同じソースから同じ zip が出る = リリースに載せた SHA256 を手元で照合できる
+const DOS_TIME = 0;
+const DOS_DATE = (1 << 5) | 1; // 1980-01-01
 
 const files = await walk(SRC);
 await mkdir('dist', { recursive: true });
@@ -38,6 +48,8 @@ for (const path of files) {
   local.writeUInt16LE(20, 4);
   local.writeUInt16LE(0x0800, 6); // UTF-8 名
   local.writeUInt16LE(8, 8); // deflate
+  local.writeUInt16LE(DOS_TIME, 10);
+  local.writeUInt16LE(DOS_DATE, 12);
   local.writeUInt32LE(crc, 14);
   local.writeUInt32LE(compressed.length, 18);
   local.writeUInt32LE(data.length, 22);
@@ -50,6 +62,8 @@ for (const path of files) {
   entry.writeUInt16LE(20, 6);
   entry.writeUInt16LE(0x0800, 8);
   entry.writeUInt16LE(8, 10);
+  entry.writeUInt16LE(DOS_TIME, 12);
+  entry.writeUInt16LE(DOS_DATE, 14);
   entry.writeUInt32LE(crc, 16);
   entry.writeUInt32LE(compressed.length, 20);
   entry.writeUInt32LE(data.length, 24);

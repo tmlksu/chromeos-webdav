@@ -40,10 +40,12 @@ Chrome App と MV2 はどちらもサポートが終了しているため、現�
 
 Chrome ウェブストアには出していないので、展開して読み込む。
 
-1. [最新リリース](../../releases) の zip を取得するか、このリポジトリを clone する
+1. [最新リリース](../../releases) の zip を取得して展開するか、このリポジトリを clone する
 2. Chrome で `chrome://extensions` を開く
 3. **デベロッパーモード** をオンにする
-4. **「パッケージ化されていない拡張機能を読み込む」** → `extension/` ディレクトリを選ぶ
+4. **「パッケージ化されていない拡張機能を読み込む」** → 読み込むディレクトリを選ぶ
+   - zip を展開した場合は **展開先のディレクトリそのもの** (`manifest.json` が直下にある)
+   - clone した場合は `extension/`
 
 ## 設定
 
@@ -88,7 +90,7 @@ URL を入力して保存すると、そのオリジンへのアクセス許可�
 ```bash
 npm test        # ユニットテスト (chrome API 不要)
 npm run check   # 構文チェック + manifest.json の妥当性
-npm run package # dist/webdav-for-files.zip を作る
+npm run package # dist/webdav-for-files-<version>.zip を作る
 
 npm run fixtures            # fixture を rclone の実出力から再生成する
 node test/live.mjs <URL>    # 稼働中のサーバに対する結合テスト
