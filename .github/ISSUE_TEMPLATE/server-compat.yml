@@ -1,0 +1,83 @@
+name: Server compatibility report
+description: Report how the extension behaves against a WebDAV server that isn't in the table yet
+title: "compat: <server name>"
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing another implementation — results go straight into the
+        table in the README, whether they pass or fail.
+
+        日本語で書いてもらって構いません。
+
+  - type: input
+    id: server
+    attributes:
+      label: Server and version
+      placeholder: "Nextcloud 31.0.2 / Apache 2.4.68 mod_dav / Synology DSM 7.2 …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: live
+    attributes:
+      label: Output of the integration test
+      description: |
+        `node test/live.mjs <URL>` pointed at your server. This is the single most
+        useful thing in the report — it walks the tree and checks that listed
+        paths can be fetched back, and that Range GET agrees with a full GET.
+
+        Add `DAV_USER` / `DAV_PASS` if your server needs Basic auth.
+      render: text
+      placeholder: |
+        $ node test/live.mjs https://dav.example.com
+        base=https://dav.example.com
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: propfind
+    attributes:
+      label: Raw PROPFIND output
+      description: |
+        Only needed if something failed. Namespace prefixes and href encoding
+        differ between servers, and that's usually where the problem is.
+
+        ```
+        curl -s -X PROPFIND https://dav.example.com/ -H "Depth: 1" | head -50
+        ```
+      render: xml
+    validations:
+      required: false
+
+  - type: input
+    id: range
+    attributes:
+      label: Does Range GET return 206?
+      description: |
+        ```
+        curl -s -o /dev/null -w "%{http_code}\n" -r 0-1023 https://dav.example.com/<some file>
+        ```
+        200 instead of 206 means the extension works but downloads whole files.
+      placeholder: "206"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: files-app
+    attributes:
+      label: Did you also try it in the ChromeOS Files app?
+      options:
+        - "No — protocol layer only (this is fine)"
+        - "Yes, it mounts and files open"
+        - "Yes, but something is wrong in the Files app"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Proxy in front of the server, subpath (baseurl), auth setup, and so on.

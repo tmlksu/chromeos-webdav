@@ -2,198 +2,217 @@
 
 [![CI](https://github.com/tmlksu/chromeos-webdav/actions/workflows/ci.yml/badge.svg)](https://github.com/tmlksu/chromeos-webdav/actions/workflows/ci.yml)
 
-WebDAV 共有を ChromeOS の Files アプリにマウントする Chrome 拡張。
-`chrome.fileSystemProvider` を使い、**開いた分だけ Range GET で取りに行く**ので、
-大きな動画も全量ダウンロードを待たずに再生が始まる。
+English | [日本語](README.ja.md)
 
-**読み取り専用。** 依存パッケージゼロ、ビルド不要。
+A Chrome extension that mounts a WebDAV share in the ChromeOS Files app.
+It uses `chrome.fileSystemProvider` and **fetches only the bytes you actually read,
+with Range GET**, so a large video starts playing without waiting for the whole
+file to download.
+
+**Read-only.** Zero dependencies, no build step.
 
 ```
-ChromeOS Files アプリ
- └ この拡張 (chrome.fileSystemProvider, MV3)
+ChromeOS Files app
+ └ this extension (chrome.fileSystemProvider, MV3)
      └ HTTPS fetch
-         └ [認証なし | Cloudflare Access]
-             └ WebDAV サーバ (rclone / Nextcloud / Apache mod_dav / …)
+         └ [no auth | Cloudflare Access]
+             └ WebDAV server (rclone / Nextcloud / Apache mod_dav / …)
 ```
 
-## 既存の実装との関係
+## How this relates to the existing extension
 
-ChromeOS で WebDAV をマウントする拡張としては
-[`yoichiro/chromeos-filesystem-webdav`](https://github.com/yoichiro/chromeos-filesystem-webdav)
-が長く使われてきたが、あちらは **Manifest V2 の Chrome App** として作られている。
-Chrome App と MV2 はどちらもサポートが終了しているため、現在の ChromeOS では動かない。
+For a long time the way to mount WebDAV on ChromeOS was
+[`yoichiro/chromeos-filesystem-webdav`](https://github.com/yoichiro/chromeos-filesystem-webdav),
+but that one is built as a **Manifest V2 Chrome App**. Chrome Apps and MV2 have
+both reached end of support, so it no longer runs on current ChromeOS.
 
-このプロジェクトは MV3 の拡張として書き直したもので、加えて
+This project is a rewrite as an MV3 extension, and additionally has
 
-- 開いた分だけ取りに行く Range GET (大きな動画がすぐ再生できる)
-- Cloudflare Access の背後にある共有への対応
-- 依存パッケージゼロ・ビルド不要
+- Range GET that fetches only what you read (large videos start playing right away)
+- support for shares sitting behind Cloudflare Access
+- zero dependencies and no build step
 
-を持つ。移植ではなくゼロから書いているので、コードの共通部分は無い。
+It was written from scratch rather than ported, so it shares no code with it.
 
-## 必要なもの
+## Requirements
 
-- ChromeOS (Chrome 120 以降)
-- PROPFIND と **Range GET (206)** を返す WebDAV サーバ
+- ChromeOS (Chrome 120 or later)
+- A WebDAV server that answers PROPFIND and **Range GET (206)**
 
-サーバ側の用意が無ければ `docker/` に rclone の一例がある。
+If you don't have a server yet, `docker/` has an rclone example.
 
-## インストール
+## Install
 
-Chrome ウェブストアには出していないので、展開して読み込む。
+It is not on the Chrome Web Store, so load it unpacked.
 
-1. [最新リリース](../../releases) の zip を取得して展開するか、このリポジトリを clone する
-2. Chrome で `chrome://extensions` を開く
-3. **デベロッパーモード** をオンにする
-4. **「パッケージ化されていない拡張機能を読み込む」** → 読み込むディレクトリを選ぶ
-   - zip を展開した場合は **展開先のディレクトリそのもの** (`manifest.json` が直下にある)
-   - clone した場合は `extension/`
+1. Download and unzip the [latest release](../../releases), or clone this repository
+2. Open `chrome://extensions`
+3. Turn on **Developer mode**
+4. **Load unpacked** → pick the directory to load
+   - If you unzipped a release, pick **the unzipped directory itself**
+     (`manifest.json` is directly inside it)
+   - If you cloned the repository, pick `extension/`
 
-## 設定
+## Configuration
 
-拡張のアイコンをクリックすると設定画面が開く (Files アプリの
-「新しいサービスを追加」からも開く)。
+Click the extension icon to open the settings page (Files app →
+**Add new service** opens it too).
 
-| 項目 | 説明 |
+| Field | Description |
 | --- | --- |
-| 表示名 | Files アプリのサイドバーに出る名前 |
-| URL | `https://dav.example.com` / サブパス配信なら `https://example.com/dav` |
-| 認証方式 | 下記参照 |
-| 自動マウント | ブラウザ起動時にマウントする |
+| Display name | The name shown in the Files app sidebar |
+| URL | `https://dav.example.com`, or `https://example.com/dav` if served under a subpath |
+| Auth mode | See below |
+| Auto-mount | Mount at browser startup |
 
-**「接続テスト」** で保存前に PROPFIND が通るか確認できる。
-URL を入力して保存すると、そのオリジンへのアクセス許可を求めるダイアログが出る
-(`optional_host_permissions` を使っているため、必要なホストにだけ権限を渡せる)。
+**Test connection** checks that PROPFIND works before you save.
+When you save a URL, Chrome asks you to grant access to that origin
+(the extension uses `optional_host_permissions`, so you only hand it the hosts
+it actually needs).
 
-共有は複数登録でき、それぞれ独立したドライブとして Files アプリに現れる。
+You can register several shares; each appears as its own drive in the Files app.
 
-### 認証方式
+### Auth modes
 
-**認証なし** — サーバに直接つなぐ。Tailscale / WireGuard / LAN 内など、
-**ネットワーク層で守られている場合にだけ**使うこと。
+**No auth** — connects to the server directly. Only use this when the server is
+**protected at the network layer**: Tailscale, WireGuard, a LAN, and so on.
 
-**Cloudflare Access** — [self-hosted アプリケーション](docs/cloudflare-access.md)で
-守られたサーバ向け。セッションが切れると自動でログインタブを開き、
-`CF_Authorization` cookie が設置されたのを検知してタブを閉じ、
-中断していたリクエストを再開する。同時に何本リクエストが走っていても、
-ログインタブは 1 枚しか開かない。
+**Cloudflare Access** — for servers behind a
+[self-hosted application](docs/cloudflare-access.md) (the doc is in Japanese).
+When the session expires the extension opens a login tab, detects that the
+`CF_Authorization` cookie has been set, closes the tab and resumes the
+interrupted requests. However many requests are in flight, only one login tab
+ever opens.
 
-## 動作確認済みのサーバ
+## Verified servers
 
-確認は 2 段階に分かれる。
+Verification splits in two.
 
-- **プロトコル層** — PROPFIND の解釈、href の往復一致、Range GET。
-  `test/live.mjs` が実サーバに対して確かめる。ChromeOS も chrome API も要らないので
-  Docker で複数実装を立てて自動で回している
-- **Files アプリ** — 実際にマウントして開けるか。Chromebook が要る
+- **Protocol layer** — how PROPFIND is interpreted, whether hrefs round-trip,
+  Range GET. `test/live.mjs` checks this against a real server. It needs neither
+  ChromeOS nor the chrome APIs, so several implementations are stood up in Docker
+  and checked automatically.
+- **Files app** — whether it actually mounts and opens. This needs a Chromebook.
 
-| サーバ | プロトコル層 | Files アプリ |
+| Server | Protocol layer | Files app |
 | --- | --- | --- |
-| `rclone serve webdav` | 66/66 | 確認済み (直接 / Cloudflare Access 経由の両方) |
-| Apache `mod_dav` | 66/66 | 未確認 |
-| [dufs](https://github.com/sigoden/dufs) | 66/66 | 未確認 |
-| [hacdias/webdav](https://github.com/hacdias/webdav) | 66/66 | 未確認 |
-| nginx (組み込み `dav` モジュール) | **対象外** | — |
+| `rclone serve webdav` | 66/66 | verified (both directly and via Cloudflare Access) |
+| Apache `mod_dav` | 66/66 | not checked |
+| [dufs](https://github.com/sigoden/dufs) | 66/66 | not checked |
+| [hacdias/webdav](https://github.com/hacdias/webdav) | 66/66 | not checked |
+| nginx (built-in `dav` module) | **not supported** | — |
 
-nginx の組み込み `ngx_http_dav_module` には PROPFIND が無く、書き込み系メソッドしか持たない。
-`nginx-dav-ext-module` を足さないと WebDAV にはならない (PROPFIND が 405 になる)。
+nginx's built-in `ngx_http_dav_module` has no PROPFIND — only the writing
+methods. Without `nginx-dav-ext-module` it isn't WebDAV, and PROPFIND returns 405.
 
-Nextcloud や Synology WebDAV Server は Basic 認証を要求するので、
-拡張が対応するまで表に入れられない ([未対応](#未対応))。
+Nextcloud and Synology WebDAV Server require Basic auth, so they can't go in the
+table until the extension supports it (see [Not implemented](#not-implemented)).
 
-手元で全部流せる:
+You can run the whole set locally:
 
 ```bash
-npm run test:compat            # docker で上の実装を立てて結合テストを流す
-npm run test:compat -- dufs    # 1 つだけ
+npm run test:compat            # stand the implementations above up in docker and test them
+npm run test:compat -- dufs    # just one
 ```
 
-他の WebDAV 実装で試したら、ぜひ結果を issue で教えてほしい。表に足す。
-`node test/live.mjs <URL>` を自分のサーバに向けるだけで確認できる。
+If you try another WebDAV implementation, please report the result in an issue —
+it goes in the table. Pointing `node test/live.mjs <URL>` at your own server is
+all it takes.
 
-## 開発
+## Development
 
 ```bash
-npm test        # ユニットテスト (chrome API 不要)
-npm run check   # 構文チェック + manifest.json の妥当性
-npm run package # dist/webdav-for-files-<version>.zip を作る
+npm test        # unit tests (no chrome APIs needed)
+npm run check   # syntax check + manifest.json validation
+npm run package # build dist/webdav-for-files-<version>.zip
 
-npm run fixtures            # fixture を rclone の実出力から再生成する
-npm run test:compat         # 複数の WebDAV 実装に対する互換テスト (docker)
-node test/live.mjs <URL>    # 稼働中のサーバに対する結合テスト
+npm run fixtures            # regenerate fixtures from rclone's real output
+npm run test:compat         # compatibility test across WebDAV implementations (docker)
+node test/live.mjs <URL>    # integration test against a running server
 ```
 
-依存パッケージは無い (`npm install` 不要)。Node 20 以降。
+There are no dependencies (`npm install` is not needed). Node 20 or later.
 
-CI が流しているものは手元でもそのまま再現できる。ChromeOS も chrome API も要らない:
+What CI runs reproduces locally as-is. Neither ChromeOS nor the chrome APIs
+are involved:
 
 ```bash
-bash test/tools/make-tree.sh /tmp/davtree     # 意地悪な名前を並べた検証用ツリー
+bash test/tools/make-tree.sh /tmp/davtree     # a test tree of deliberately awkward names
 DAV_SHARE_PATH=/tmp/davtree docker compose -f docker/docker-compose.yml up -d
 node test/live.mjs http://127.0.0.1:8080
 ```
 
-`test/live.mjs` はサーバ固有の前提を置かない。ツリーを歩いて、
-一覧で得たパスをそのまま引き直せるか、Range GET が全量 GET と一致するかを確かめる。
-自分の WebDAV サーバにそのまま向けられる:
+`test/live.mjs` assumes nothing server-specific. It walks the tree and checks
+that a path it got from a listing can be fetched back as-is, and that a Range GET
+agrees with a full GET. Point it straight at your own WebDAV server:
 
 ```bash
-node test/live.mjs https://dav.example.com                    # 認証なし
-DAV_USER=u DAV_PASS=p node test/live.mjs https://dav.example.com   # Basic 認証のサーバ
+node test/live.mjs https://dav.example.com                    # no auth
+DAV_USER=u DAV_PASS=p node test/live.mjs https://dav.example.com   # server with Basic auth
 CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
-  node test/live.mjs https://dav.example.com                  # Cloudflare Access 経由
+  node test/live.mjs https://dav.example.com                  # via Cloudflare Access
 ```
 
-## 設計上の判断メモ
+## Design notes
 
-実装しようとする人が同じ罠を踏まないように、理由の要る箇所を残しておく。
+Recorded so that anyone reimplementing this doesn't fall into the same traps.
 
-- **XML パースは自前**。service worker では `DOMParser` が使えない。
-  タグ単位で走査する小さなスキャナを `dav.js` に書いた (依存ゼロ)。
-  正規表現ではなく状態機械なので、属性内の `>`、自己閉じタグ、
-  名前空間プレフィックスの違い (`D:` / `d:` / `lp1:`) を取り違えない。
-- **複数 propstat を扱う**。rclone は prop 限定 PROPFIND に対し、
-  存在するプロパティを 200 の propstat に、存在しないものを 404 の propstat に
-  分けて返す。2xx の propstat だけを採用しないと、ディレクトリの
-  `getcontentlength` が空文字で上書きされる。
-- **エントリ名は `displayname` ではなく `href` から導出**する。
-  FSP に返した name はそのまま次のリクエストのパスとして戻ってくるため、
-  href と往復一致していないと「一覧には出るが開けない」状態になる。
-  サーバによって `+` `=` `'` `(` `~` をエンコードするかどうかが違うので、
-  ここは実サーバで往復を確かめる価値がある (`test/live.mjs` がやっている)。
-- **末尾を跨ぐ Range を 416 で断るサーバがある**。RFC 7233 はサーバ側に
-  末尾での切り詰めを求めていて rclone と Apache はそうするが、dufs は断る。
-  FSP は固定長で読むので**最後のチャンクは必ず末尾を跨ぐ** —
-  つまり全ファイルで踏み、1 チャンクより小さいファイルは丸ごと空になる。
-  断られたときだけ開放レンジ `bytes=N-` で引き直している。常に開放レンジで
-  投げないのは、それだと残り全部 (動画なら数 GB) が飛んできて
-  ストリーミングにならないため。
-- **Access の失効判定はリダイレクトと 401 のみ**。非 2xx すべてを失効とみなすと、
-  404 (存在しないファイル) や 403 (ポリシー拒否) のたびにログインタブが暴発する。
-  404 → `NOT_FOUND`、403 → `ACCESS_DENIED` に写像し、
-  `opaqueredirect` / status 0 / 401 だけを失効として扱う。
-- **ログインは single-flight**。Files アプリはディレクトリを開くと複数リクエストを
-  同時に投げるため、ゲートを入れないとログインタブが何枚も開く。
-- **タイムアウト時にログインタブを閉じない**。90 秒は MFA 入力には短いことがある。
-  タブは残し、次のログイン要求で同じタブを使い回す。
-- **service worker は落ちる前提**。open 中ファイルの
-  `fileSystemId + openRequestId → パス` は `chrome.storage.session` に保存し、
-  ハンドラ内で遅延復元する。
-- **`fileSystemId` は URL から決定的に導出**する。設定を消して足し直しても
-  同じ id になるので、ChromeOS 側に残ったマウント状態と食い違わない。
-- **`host_permissions` は optional**。MV3 では静的な `host_permissions` を
-  実行時に変えられないため、`optional_host_permissions` + 設定画面からの
-  `chrome.permissions.request()` にしている。ユーザー操作が要るので、
-  権限要求は必ず設定画面側で行う。
+- **The XML parsing is hand-written.** `DOMParser` isn't available in a service
+  worker, so `dav.js` has a small scanner that walks tag by tag (zero
+  dependencies). It's a state machine rather than a regex, so it doesn't trip
+  over a `>` inside an attribute, self-closing tags, or differing namespace
+  prefixes (`D:` / `d:` / `lp1:`).
+- **Multiple propstat are handled.** For a prop-limited PROPFIND, rclone splits
+  its answer: properties that exist go in a 200 propstat, ones that don't in a
+  404 propstat. Unless you take only the 2xx propstat, a directory's
+  `getcontentlength` gets overwritten with an empty string.
+- **Entry names are derived from `href`, not `displayname`.** A name handed to
+  FSP comes straight back as the path of the next request, so unless it
+  round-trips with the href you end up with entries that list but won't open.
+  Servers differ on whether they encode `+` `=` `'` `(` `~`, which makes this
+  worth checking against a real server (`test/live.mjs` does).
+- **Some servers refuse a Range that crosses end of file with 416.** RFC 7233
+  asks servers to truncate at the end, and rclone and Apache do, but dufs
+  refuses. FSP reads in fixed-size chunks, so **the last chunk of every file
+  crosses the end** — meaning every file is affected, and any file smaller than
+  one chunk comes back completely empty. Only when refused does the extension
+  retry with an open-ended `bytes=N-`. It doesn't always use the open-ended form
+  because that sends the entire remainder (gigabytes, for a video), which is the
+  opposite of streaming.
+- **Only redirects and 401 count as an expired Access session.** Treating every
+  non-2xx as expired would pop a login tab on every 404 (missing file) and 403
+  (policy denial). 404 maps to `NOT_FOUND` and 403 to `ACCESS_DENIED`; only
+  `opaqueredirect`, status 0 and 401 are treated as expiry.
+- **Login is single-flight.** The Files app fires several requests at once when
+  a directory is opened, so without a gate you get several login tabs.
+- **The login tab is not closed on timeout.** 90 seconds can be short for
+  entering an MFA code. The tab is left open and reused by the next login.
+- **The service worker is assumed to die.** The `fileSystemId + openRequestId →
+  path` mapping for open files is kept in `chrome.storage.session` and restored
+  lazily inside the handlers.
+- **`fileSystemId` is derived deterministically from the URL.** Removing a share
+  and adding it back produces the same id, so it can't disagree with mount state
+  left over on the ChromeOS side.
+- **`host_permissions` are optional.** MV3 can't change static `host_permissions`
+  at runtime, so this uses `optional_host_permissions` plus
+  `chrome.permissions.request()` from the settings page. That call requires a
+  user gesture, so permission requests always happen on the settings page.
 
-## 未対応
+## Not implemented
 
-- 書き込み (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
-- メタデータキャッシュ (ディレクトリ表示の高速化)
-- サムネイル (`onGetMetadataRequested` の `thumbnail`)
-- Basic 認証 / Bearer トークン
-- ファイル監視 (`watchable`)
+- Writing (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
+- Metadata caching (faster directory listings)
+- Thumbnails (`thumbnail` in `onGetMetadataRequested`)
+- Basic auth / bearer tokens
+- File watching (`watchable`)
 
-## ライセンス
+## Documentation
+
+`docs/` is currently Japanese-only:
+
+- [docs/cloudflare-access.md](docs/cloudflare-access.md) — putting the server behind Cloudflare Access
+- [docs/troubleshooting.md](docs/troubleshooting.md) — troubleshooting
+
+## License
 
 MIT
