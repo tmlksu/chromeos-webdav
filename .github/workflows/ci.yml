@@ -29,7 +29,8 @@ jobs:
     name: live (rclone)
     runs-on: ubuntu-latest
     env:
-      DAV_SHARE_PATH: ${{ runner.temp }}/davtree
+      # runner コンテキストは job の env では使えない (ステップ内でのみ有効) ので、
+      # 共有先のパスは最初のステップで $RUNNER_TEMP から組み立てて GITHUB_ENV に流す
       COMPOSE: docker/docker-compose.yml
     steps:
       - uses: actions/checkout@v4
@@ -39,10 +40,13 @@ jobs:
 
       - name: 検証用ツリーを作る
         run: |
-          bash test/tools/make-tree.sh "$DAV_SHARE_PATH"
-          # compose の user: は既定 1000:1000。runner の uid は違うので合わせる
-          echo "DAV_UID=$(id -u)" >> "$GITHUB_ENV"
-          echo "DAV_GID=$(id -g)" >> "$GITHUB_ENV"
+          bash test/tools/make-tree.sh "$RUNNER_TEMP/davtree"
+          {
+            echo "DAV_SHARE_PATH=$RUNNER_TEMP/davtree"
+            # compose の user: は既定 1000:1000。runner の uid は違うので合わせる
+            echo "DAV_UID=$(id -u)"
+            echo "DAV_GID=$(id -g)"
+          } >> "$GITHUB_ENV"
 
       - name: rclone serve webdav を起動
         run: |
