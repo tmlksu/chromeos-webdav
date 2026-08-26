@@ -179,6 +179,13 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
   retry with an open-ended `bytes=N-`. It doesn't always use the open-ended form
   because that sends the entire remainder (gigabytes, for a video), which is the
   opposite of streaming.
+- **Metadata goes through a short-lived cache.** When a directory is opened the
+  Files app fetches the listing once, then sends `onGetMetadataRequested` for
+  each child to render it. Done naively that is 1 + N PROPFINDs, and over a
+  tunnel one round trip's latency becomes N of them. The Depth:1 response
+  already contains every child's metadata, so it is kept for a few seconds.
+  The extension is read-only, so nothing breaks if what you see is slightly
+  stale, and the cache dies with the service worker.
 - **Only redirects and 401 count as an expired Access session.** Treating every
   non-2xx as expired would pop a login tab on every 404 (missing file) and 403
   (policy denial). 404 maps to `NOT_FOUND` and 403 to `ACCESS_DENIED`; only
@@ -201,7 +208,6 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
 ## Not implemented
 
 - Writing (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
-- Metadata caching (faster directory listings)
 - Thumbnails (`thumbnail` in `onGetMetadataRequested`)
 - Basic auth / bearer tokens
 - File watching (`watchable`)

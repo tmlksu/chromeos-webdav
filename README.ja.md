@@ -170,6 +170,13 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
   断られたときだけ開放レンジ `bytes=N-` で引き直している。常に開放レンジで
   投げないのは、それだと残り全部 (動画なら数 GB) が飛んできて
   ストリーミングにならないため。
+- **メタデータは短命キャッシュに載せる**。Files アプリはディレクトリを開くと、
+  一覧を 1 回取ったあと表示のために子エントリ 1 件ずつ
+  `onGetMetadataRequested` を投げてくる。素直に実装すると 1 + N 回の PROPFIND になり、
+  トンネル越しだと 1 往復の RTT がそのまま N 倍になる。Depth:1 の応答には
+  既に全子エントリのメタデータが入っているので、それを数秒だけ持っておく。
+  読み取り専用なので、古いものが見えても壊れるものは無い。
+  キャッシュは service worker と一緒に消える (安全側)。
 - **Access の失効判定はリダイレクトと 401 のみ**。非 2xx すべてを失効とみなすと、
   404 (存在しないファイル) や 403 (ポリシー拒否) のたびにログインタブが暴発する。
   404 → `NOT_FOUND`、403 → `ACCESS_DENIED` に写像し、
@@ -191,7 +198,6 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
 ## 未対応
 
 - 書き込み (`onCreateFile` / `onWriteFile` / `onDeleteEntry` / `onMoveEntry`)
-- メタデータキャッシュ (ディレクトリ表示の高速化)
 - サムネイル (`onGetMetadataRequested` の `thumbnail`)
 - Basic 認証 / Bearer トークン
 - ファイル監視 (`watchable`)

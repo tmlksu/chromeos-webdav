@@ -12,6 +12,7 @@
  */
 
 import { DavClient, DavHttpError } from './dav.js';
+import { CachedDavClient } from './cache.js';
 import { createAuth, AccessAuthError } from './auth.js';
 import { ShareStore } from './config.js';
 
@@ -51,7 +52,10 @@ async function getContext(fileSystemId) {
     throw new DavHttpError(404, `未設定の共有です: ${fileSystemId}`);
   }
   const auth = createAuth(share);
-  const context = { share, auth, client: new DavClient(share.url, auth.fetch) };
+  // CachedDavClient は DavClient と同じ形なので、ハンドラ側は何も変わらない。
+  // キャッシュは context と一緒に捨てられる (設定変更・アンマウント・SW 停止)。
+  const client = new CachedDavClient(new DavClient(share.url, auth.fetch));
+  const context = { share, auth, client };
   contexts.set(fileSystemId, context);
   return context;
 }
