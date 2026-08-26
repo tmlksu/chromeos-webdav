@@ -106,3 +106,14 @@ li .url { color: var(--muted); font-size: 13px; word-break: break-all; }
   white-space: nowrap;
 }
 .badge.mounted { color: var(--ok); border-color: currentColor; }
+
+/* Basic 認証の注意書き。読み飛ばされると資格情報の保存場所を知らないまま使われる。 */
+.warning {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid #c8963e;
+  background: rgba(200, 150, 62, 0.1);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}

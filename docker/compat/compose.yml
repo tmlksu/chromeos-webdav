@@ -44,6 +44,26 @@ services:
     command: [-c, /config.yml]
     ports: ["127.0.0.1:18084:6065"]
 
+  dufs-auth:
+    # Basic 認証つきの構成。拡張の BasicAuth が実サーバに通ることを確かめる枠で、
+    # サーバの方言そのものは上の dufs と同じ。
+    image: sigoden/dufs:latest
+    <<: *share
+    command: [/data, -a, "dav:s3cret@/:ro"]
+    ports: ["127.0.0.1:18086:5000"]
+
+  nextcloud:
+    # WebDAV サーバとして真っ先に名前が挙がる実装。他と違う点が 2 つあり、
+    # どちらも別の経路を踏む: Basic 認証が必須で、サブパス配信 (baseurl) である。
+    # 初回起動時にインストールが走るので、他より立ち上がりが遅い。
+    image: nextcloud:stable
+    environment:
+      SQLITE_DATABASE: nc
+      NEXTCLOUD_ADMIN_USER: dav
+      NEXTCLOUD_ADMIN_PASSWORD: s3cret-compat-only
+      NEXTCLOUD_TRUSTED_DOMAINS: 127.0.0.1
+    ports: ["127.0.0.1:18087:80"]
+
   nginx:
     # 組み込みの ngx_http_dav_module は PROPFIND を持たない (dav_ext が要る)。
     # 動かない構成をあえて 1 つ置いて、405 の切り分け (docs/troubleshooting.md) の

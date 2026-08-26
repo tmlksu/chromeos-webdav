@@ -3,6 +3,8 @@
  *
  * - NoAuth: そのまま fetch する。Tailscale / VPN / LAN 内など、
  *   ネットワーク層で守っている構成向け。
+ * - BasicAuth: RFC 7617 の Basic 認証。Nextcloud / Synology など、
+ *   サーバ自身が認証を持っている構成向け。
  * - AccessAuth: Cloudflare Access (self-hosted app) に対する認証フロー。
  *
  * ---
@@ -231,13 +233,82 @@ export class NoAuth {
 }
 
 /**
+ * RFC 7617 の credentials を作る。
+ *
+ * btoa は Latin-1 しか受け付けないので、非 ASCII のパスワードをそのまま渡すと
+ * 例外になる。RFC 7617 は UTF-8 を想定しているので、先に UTF-8 に符号化してから
+ * バイト列として base64 する。
+ */
+export function basicCredentials(username, password) {
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Basic 認証。サーバ自身が認証を持っている構成向け (Nextcloud / Synology など)。
+ *
+ * 資格情報は chrome.storage.local に平文で載る。他の拡張からは読めないが
+ * ディスク上は平文なので、設定画面でその旨を明示し、http:// では選ばせない
+ * (config.js の validateShare)。
+ *
+ * リダイレクトは追う。ただし fetch はリダイレクト時に Authorization を
+ * 落とさないので、別オリジンへ飛ばされると資格情報がそこへ渡る。
+ * それを避けるため、追った先が同一オリジンでなければ弾く。
+ */
+export class BasicAuth {
+  constructor(origin, options = {}) {
+    this.origin = new URL(origin).origin;
+    const deps = options.deps || {};
+    this.fetchImpl = deps.fetch || ((...args) => fetch(...args));
+    this.credentials = basicCredentials(options.username ?? '', options.password ?? '');
+    this.fetch = this.fetch.bind(this);
+  }
+
+  async fetch(url, init = {}) {
+    const response = await this.fetchImpl(url, {
+      ...init,
+      credentials: 'omit',
+      redirect: 'follow',
+      headers: {
+        ...(init.headers || {}),
+        Authorization: `Basic ${this.credentials}`,
+      },
+    });
+    if (response.url && new URL(response.url).origin !== this.origin) {
+      throw new BasicAuthError(`別オリジンへリダイレクトされた: ${response.url}`);
+    }
+    return response;
+  }
+
+  async ensureAuthenticated() {
+    return true; // 資格情報は毎回付けるので、事前確認で得るものが無い
+  }
+}
+
+export class BasicAuthError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BasicAuthError';
+  }
+}
+
+/**
  * 共有設定から認証実装を選ぶ。
- * @param {{url: string, authMode: 'none'|'cloudflare-access'}} share
+ * @param {{url: string, authMode: 'none'|'basic'|'cloudflare-access',
+ *          username?: string, password?: string}} share
  */
 export function createAuth(share, options = {}) {
   switch (share.authMode) {
     case 'cloudflare-access':
       return new AccessAuth(share.url, options);
+    case 'basic':
+      return new BasicAuth(share.url, {
+        ...options,
+        username: share.username,
+        password: share.password,
+      });
     case 'none':
       return new NoAuth(share.url, options);
     default:

@@ -16,6 +16,9 @@ const form = document.getElementById('share-form');
 const nameInput = document.getElementById('name');
 const urlInput = document.getElementById('url');
 const authSelect = document.getElementById('auth-mode');
+const basicFields = document.getElementById('basic-fields');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
 const autoMountInput = document.getElementById('auto-mount');
 const authHelp = document.getElementById('auth-help');
 const formStatus = document.getElementById('form-status');
@@ -26,7 +29,14 @@ const empty = document.getElementById('empty');
 
 const AUTH_HELP = {
   none: 'サーバに直接つなぎます。インターネットに露出している共有には使わないでください。',
+  basic: 'サーバ自身が持つユーザー名とパスワードで認証します。https の共有にのみ設定できます。',
   'cloudflare-access': '未認証を検知するとログインタブを開き、認証が済むと自動で閉じて処理を再開します。',
+};
+
+const AUTH_LABELS = {
+  none: '認証なし',
+  basic: 'Basic 認証',
+  'cloudflare-access': 'Cloudflare Access',
 };
 
 function setStatus(message, kind = '') {
@@ -50,8 +60,16 @@ function readForm() {
     name: nameInput.value,
     url: urlInput.value,
     authMode: authSelect.value,
+    username: usernameInput.value,
+    password: passwordInput.value,
     autoMount: autoMountInput.checked,
   };
+}
+
+/** Basic 認証を選んだときだけ資格情報の欄を出す。 */
+function syncAuthFields() {
+  basicFields.hidden = authSelect.value !== 'basic';
+  authHelp.textContent = AUTH_HELP[authSelect.value] || '';
 }
 
 /** PROPFIND Depth:1 を 1 回投げて、実際に一覧が取れるか確かめる。 */
@@ -125,6 +143,7 @@ form.addEventListener('submit', (event) => {
       setStatus(`${share.name} をマウントしました。Files アプリで開けます。`, 'ok');
       form.reset();
       autoMountInput.checked = true;
+      syncAuthFields();
     } else {
       setStatus(`保存しましたがマウントに失敗しました:\n${response?.error || '不明なエラー'}`, 'error');
     }
@@ -132,9 +151,7 @@ form.addEventListener('submit', (event) => {
   });
 });
 
-authSelect.addEventListener('change', () => {
-  authHelp.textContent = AUTH_HELP[authSelect.value] || '';
-});
+authSelect.addEventListener('change', syncAuthFields);
 
 async function render() {
   const [shares, response] = await Promise.all([
@@ -156,7 +173,7 @@ async function render() {
     name.textContent = share.name;
     const url = document.createElement('div');
     url.className = 'url';
-    url.textContent = `${share.url} · ${share.authMode === 'none' ? '認証なし' : 'Cloudflare Access'}`;
+    url.textContent = `${share.url} · ${AUTH_LABELS[share.authMode] || share.authMode}`;
     info.append(name, url);
 
     const badge = document.createElement('span');
@@ -201,5 +218,5 @@ async function render() {
   }
 }
 
-authHelp.textContent = AUTH_HELP[authSelect.value];
+syncAuthFields();
 render().catch((error) => setStatus(describeError(error), 'error'));

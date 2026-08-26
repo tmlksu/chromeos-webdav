@@ -18,24 +18,34 @@
  */
 import assert from 'node:assert/strict';
 import { DavClient } from '../extension/dav.js';
+import { createAuth } from '../extension/auth.js';
 
 const BASE = process.argv[2] || process.env.DAV_URL || 'http://127.0.0.1:8080';
 const MAX_DEPTH = Number(process.env.DAV_MAX_DEPTH || 2);
 const MAX_ENTRIES_PER_DIR = Number(process.env.DAV_MAX_ENTRIES || 40);
 
-function buildHeaders() {
-  const headers = {};
-  if (process.env.CF_ACCESS_TOKEN) headers['cf-access-token'] = process.env.CF_ACCESS_TOKEN;
-  if (process.env.DAV_USER) {
-    const pair = `${process.env.DAV_USER}:${process.env.DAV_PASS || ''}`;
-    headers.Authorization = `Basic ${Buffer.from(pair).toString('base64')}`;
-  }
-  return headers;
-}
+// Basic 認証は拡張の実装をそのまま通す。ここで Authorization を組み立て直すと、
+// 検証しているのがテスト側のコードになってしまう。
+//
+// なお authMode 'basic' は設定画面では https にしか設定できないが (config.js)、
+// それは保存時のポリシーであって BasicAuth 自体の制約ではない。
+// ローカルの http サーバに向けた検証はこの経路で問題なくできる。
+const auth = process.env.DAV_USER
+  ? createAuth({
+    url: BASE,
+    authMode: 'basic',
+    username: process.env.DAV_USER,
+    password: process.env.DAV_PASS || '',
+  })
+  : createAuth({ url: BASE, authMode: 'none' });
 
-const extraHeaders = buildHeaders();
+// cf-access-token は CLI 検証用の経路 (拡張本体は cookie を使う)。
+const cfHeaders = process.env.CF_ACCESS_TOKEN
+  ? { 'cf-access-token': process.env.CF_ACCESS_TOKEN }
+  : {};
+
 const client = new DavClient(BASE, (url, init = {}) =>
-  fetch(url, { ...init, headers: { ...(init.headers || {}), ...extraHeaders } }));
+  auth.fetch(url, { ...init, headers: { ...(init.headers || {}), ...cfHeaders } }));
 
 let checks = 0;
 let dirCount = 0;
@@ -115,8 +125,8 @@ async function verifyRanges(entry) {
 }
 
 console.log(`base=${BASE}`);
-if (extraHeaders['cf-access-token']) console.log('  auth: cf-access-token');
-if (extraHeaders.Authorization) console.log('  auth: basic');
+if (cfHeaders['cf-access-token']) console.log('  auth: cf-access-token');
+if (process.env.DAV_USER) console.log(`  auth: basic (${process.env.DAV_USER})`);
 
 await walk('/', MAX_DEPTH);
 

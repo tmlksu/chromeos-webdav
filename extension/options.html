@@ -27,10 +27,34 @@
         認証方式
         <select id="auth-mode">
           <option value="none">認証なし (VPN / Tailscale / LAN 内)</option>
+          <option value="basic">Basic 認証 (Nextcloud / Synology など)</option>
           <option value="cloudflare-access">Cloudflare Access</option>
         </select>
         <small id="auth-help"></small>
       </label>
+
+      <div id="basic-fields" hidden>
+        <label>
+          ユーザー名
+          <input id="username" type="text" autocomplete="off" spellcheck="false">
+        </label>
+
+        <label>
+          パスワード
+          <input id="password" type="password" autocomplete="new-password">
+          <small>
+            アプリパスワードを発行できるサーバ (Nextcloud など) では、
+            アカウント本体のパスワードではなくそちらを使ってください。
+          </small>
+        </label>
+
+        <p class="warning">
+          入力した資格情報は、この拡張の保存領域
+          (<code>chrome.storage.local</code>) に<strong>平文で保存されます</strong>。
+          他の拡張機能から読まれることはありませんが、ディスク上は暗号化されません。
+          そのため <code>https://</code> の共有にのみ設定できます。
+        </p>
+      </div>
 
       <label class="checkbox">
         <input id="auto-mount" type="checkbox" checked>
