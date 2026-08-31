@@ -6,6 +6,10 @@
 # ここで見ているのは拡張の HTTP 層だけなので ChromeOS は要らない。
 # ポートは 1808x 帯。docker/docker-compose.yml の 8080 とぶつからないようにしてある。
 
+# 上と同じ理由でプロジェクト名を固定する。
+# こちらは down --remove-orphans を掛けるので、取り違えたときの破壊力が大きい。
+name: chromeos-webdav-compat
+
 x-share: &share
   volumes:
     - "${DAV_SHARE_PATH:?DAV_SHARE_PATH is required}:/data:ro"

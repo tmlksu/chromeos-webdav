@@ -1,3 +1,10 @@
+# プロジェクト名を明示的に固定する。
+# 既定ではディレクトリ名 (= docker) がプロジェクト名になる。docker/ 配下に
+# compose を置くリポジトリは珍しくないので、別のリポジトリで docker compose を
+# 叩いたときに同一プロジェクト・同一サービスと見なされ、こちらのコンテナが
+# 巻き添えで recreate / destroy される。
+name: chromeos-webdav
+
 services:
   rclone-webdav:
     image: rclone/rclone:1.75.0

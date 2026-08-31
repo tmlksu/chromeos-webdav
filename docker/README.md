@@ -28,6 +28,26 @@ Range GET が 200 (全量) を返す構成では、拡張は動くが
 **ファイルを開くたびに全量ダウンロードが走る**。
 ストリーミング再生の利点が消えるので、必ず 206 になることを確認すること。
 
+## プロジェクト名を固定してある
+
+`compose.yml` の先頭に `name:` を置いている。既定では **compose ファイルのある
+ディレクトリ名** がプロジェクト名になるため、ここは `docker` になる。
+`docker/` 配下に compose を置くリポジトリは珍しくないので、
+別のリポジトリで `docker compose -f docker/docker-compose.yml up -d` を叩くと、
+同一プロジェクトの同一サービスと見なされて**こちらのコンテナが巻き添えで
+recreate される**。`down` なら消える。
+
+`docker compose ls` で、意図したプロジェクト名になっているか確認できる。
+
+固定した結果、既に 8080 を使っている WebDAV サーバがあると
+`Bind for 127.0.0.1:8080 failed: port is already allocated` で**起動に失敗する**。
+これは正しい挙動 (黙って相手を壊すより良い)。並べて動かしたいときはポートを変える:
+
+```bash
+DAV_BIND_PORT=8090 DAV_SHARE_PATH=... docker compose up -d
+node ../test/live.mjs http://127.0.0.1:8090
+```
+
 ## 設計メモ
 
 - `--read-only` により PUT / DELETE / MKCOL は拒否される。
