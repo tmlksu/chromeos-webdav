@@ -232,6 +232,13 @@ CF_ACCESS_TOKEN=$(cloudflared access token -app=https://dav.example.com) \
 - Bearer トークン
 - ファイル監視 (`watchable`)
 
+## ドキュメント
+
+- [PRIVACY.md](PRIVACY.md) — 何を保存し、何を送るか
+- [docs/cloudflare-access.md](docs/cloudflare-access.md) — Cloudflare Access の背後に置く
+- [docs/troubleshooting.md](docs/troubleshooting.md) — トラブルシューティング
+- [docs/webstore-submission.md](docs/webstore-submission.md) — ウェブストア提出用の下書き
+
 ## ライセンス
 
 MIT
