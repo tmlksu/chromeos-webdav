@@ -18,6 +18,9 @@ import {
   joinPath,
   DavClient,
   DavHttpError,
+  DavTimeoutError,
+  METADATA_TIMEOUT_MS,
+  READ_TIMEOUT_MS,
 } from '../extension/dav.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -417,4 +420,55 @@ test('readRange: 断られなければ引き直さない (1 リクエストで�
   const client = new DavClient('https://h', (url, init) => { calls++; return inner(url, init); });
   await client.readRange('/f', 0, 100);
   assert.equal(calls, 1);
+});
+
+// --- 期限 -------------------------------------------------------------------
+// 期限が無いと、トンネルが刺さったとき fetch が返らず Files アプリが無限に待つ。
+
+/** 中断されるまで解決しない fetch。刺さったサーバの代わり。 */
+function hangingFetch() {
+  return async (url, init) => new Promise((_resolve, reject) => {
+    // Node では AbortSignal.timeout のタイマーが unref されていてイベントループを
+    // 生かさないため、これが無いと期限が来る前にループが空になりテストごと
+    // キャンセルされる。実際に刺さったサーバなら接続がループを保つ。
+    // ブラウザ側の挙動とは無関係のテスト都合。
+    const keepAlive = setInterval(() => {}, 10);
+    init.signal?.addEventListener('abort', () => {
+      clearInterval(keepAlive);
+      reject(init.signal.reason);
+    });
+  });
+}
+
+test('propfind: 期限を過ぎたら DavTimeoutError', async () => {
+  const client = new DavClient('https://h', hangingFetch(), { metadataTimeoutMs: 20 });
+  await assert.rejects(() => client.readDirectory('/'), DavTimeoutError);
+});
+
+test('readRange: 期限を過ぎたら DavTimeoutError', async () => {
+  const client = new DavClient('https://h', hangingFetch(), { readTimeoutMs: 20 });
+  await assert.rejects(() => client.readRange('/f', 0, 10), DavTimeoutError);
+});
+
+test('期限は用途ごとに分かれている (読み出しのほうが長い)', () => {
+  assert.ok(READ_TIMEOUT_MS > METADATA_TIMEOUT_MS);
+  const client = new DavClient('https://h', mockFetch(async () => ({ ok: true, status: 207, text: async () => '' })));
+  assert.equal(client.metadataTimeoutMs, METADATA_TIMEOUT_MS);
+  assert.equal(client.readTimeoutMs, READ_TIMEOUT_MS);
+});
+
+test('期限は signal と timeoutMs の両方で渡す', async () => {
+  // signal は素の fetch を渡された場合に効かせるため。
+  // timeoutMs は、内部で再試行する auth 実装が試行ごとに張り直すため。
+  const fetchImpl = mockFetch(async () => ({ ok: true, status: 207, text: async () => '<multistatus/>' }));
+  const client = new DavClient('https://h', fetchImpl, { metadataTimeoutMs: 1234 });
+  await client.readDirectory('/');
+  assert.equal(fetchImpl.calls[0].init.timeoutMs, 1234);
+  assert.ok(fetchImpl.calls[0].init.signal instanceof AbortSignal);
+});
+
+test('期限内に終われば素通し', async () => {
+  const client = new DavClient('https://h', rangeServer(FILE), { readTimeoutMs: 5_000 });
+  const buf = await client.readRange('/f', 0, 100);
+  assert.equal(buf.byteLength, 100);
 });

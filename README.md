@@ -203,6 +203,18 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
   already contains every child's metadata, so it is kept for a few seconds.
   The extension is read-only, so nothing breaks if what you see is slightly
   stale, and the cache dies with the service worker.
+- **Every request carries a deadline.** Without one, a tunnel or proxy that stops
+  answering leaves `fetch` hanging and **the Files app waits forever** — ChromeOS
+  offers no way to cancel it. Metadata (PROPFIND) gets 30 seconds, body reads 120,
+  the longer budget being there so a slow link isn't cut off. The deadline is
+  renewed **per attempt**: re-authenticating with Cloudflare Access can take up to
+  90 seconds, so a retry that reuses the original deadline is guaranteed to expire.
+- **A broken path is not reported the same way as a misconfiguration or a bug.**
+  5xx and timeouts map to `IO`, 401/403 to `ACCESS_DENIED`, 404 to `NOT_FOUND`,
+  405/501 to `INVALID_OPERATION`. Collapsing them all into `FAILED` leaves the user
+  unable to tell "the tunnel is down" from "the credentials are wrong" from "the
+  extension is broken". The mapping lives in `errors.js`, which touches no chrome
+  APIs and is therefore directly testable.
 - **Only redirects and 401 count as an expired Access session.** Treating every
   non-2xx as expired would pop a login tab on every 404 (missing file) and 403
   (policy denial). 404 maps to `NOT_FOUND` and 403 to `ACCESS_DENIED`; only

@@ -306,6 +306,36 @@ function buildEntry(response, baseUrlPath) {
   };
 }
 
+/**
+ * リクエストが期限内に終わらなかった。
+ *
+ * 期限が無いと、トンネルが刺さったときに fetch が返らず Files アプリが無限に待つ
+ * (ChromeOS 側から中断する手段が無い)。失敗として返せば、少なくとも
+ * 「応答が無い」という結果がユーザに見える。
+ */
+export class DavTimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DavTimeoutError';
+  }
+}
+
+/** AbortSignal.timeout による中断か。ブラウザは TimeoutError、実装によっては AbortError。 */
+function isAbortError(error) {
+  return error?.name === 'TimeoutError' || error?.name === 'AbortError';
+}
+
+/**
+ * メタデータ取得 (PROPFIND) の期限。小さな応答なので、これを超えるなら経路が死んでいる。
+ */
+export const METADATA_TIMEOUT_MS = 30_000;
+
+/**
+ * 本体読み出し (Range GET) の期限。FSP は固定長のチャンクで読むので数 MB 単位だが、
+ * 遅い回線を弾かないようメタデータより大きく取る。
+ */
+export const READ_TIMEOUT_MS = 120_000;
+
 /** HTTP ステータスを保持するエラー。呼び出し側が FSP のエラーコードに写像する。 */
 export class DavHttpError extends Error {
   constructor(status, message) {
@@ -327,14 +357,41 @@ export class DavClient {
    * @param {string} baseUrl 例: 'https://dav.example.com' または 'https://host/dav'
    * @param {(url: string, init: RequestInit) => Promise<Response>} fetchImpl
    *        認証を挟んだ fetch。auth.js の AccessAuth#fetch を渡す想定。
+   * @param {{metadataTimeoutMs?: number, readTimeoutMs?: number}} [options]
    */
-  constructor(baseUrl, fetchImpl) {
+  constructor(baseUrl, fetchImpl, options = {}) {
     const trimmed = baseUrl.replace(/\/+$/, '');
     const url = new URL(trimmed || baseUrl);
     this.origin = url.origin;
     this.baseUrlPath = normalizePath(url.pathname || '/');
     this.baseUrl = trimmed;
     this.fetchImpl = fetchImpl;
+    this.metadataTimeoutMs = options.metadataTimeoutMs ?? METADATA_TIMEOUT_MS;
+    this.readTimeoutMs = options.readTimeoutMs ?? READ_TIMEOUT_MS;
+  }
+
+  /**
+   * 期限つきの 1 回のリクエスト。
+   *
+   * signal と timeoutMs の両方を渡している。signal だけで足りるように見えるが、
+   * AccessAuth は失効を検知するとログイン (最大 90 秒) を挟んで内部で 1 度再試行するため、
+   * 同じ signal を使い回すと再試行が必ず期限切れになる。timeoutMs を見た側が
+   * 試行ごとに期限を張り直す。素の fetch を渡された場合は timeoutMs は無視され、
+   * ここで張った signal が効く。
+   */
+  async _fetch(url, init, timeoutMs, what) {
+    try {
+      return await this.fetchImpl(url, {
+        ...init,
+        timeoutMs,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new DavTimeoutError(`${what} が ${timeoutMs}ms 以内に応答しなかった`);
+      }
+      throw error;
+    }
   }
 
   urlFor(path) {
@@ -344,14 +401,19 @@ export class DavClient {
   }
 
   async propfind(path, depth) {
-    const response = await this.fetchImpl(this.urlFor(path), {
-      method: 'PROPFIND',
-      headers: {
-        Depth: String(depth),
-        'Content-Type': 'application/xml; charset=utf-8',
+    const response = await this._fetch(
+      this.urlFor(path),
+      {
+        method: 'PROPFIND',
+        headers: {
+          Depth: String(depth),
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+        body: PROPFIND_BODY,
       },
-      body: PROPFIND_BODY,
-    });
+      this.metadataTimeoutMs,
+      `PROPFIND ${path}`,
+    );
     if (!response.ok) {
       throw new DavHttpError(response.status, `PROPFIND ${path} → ${response.status}`);
     }
@@ -375,10 +437,12 @@ export class DavClient {
   }
 
   _rangeGet(path, range) {
-    return this.fetchImpl(this.urlFor(path), {
-      method: 'GET',
-      headers: { Range: range },
-    });
+    return this._fetch(
+      this.urlFor(path),
+      { method: 'GET', headers: { Range: range } },
+      this.readTimeoutMs,
+      `GET ${path} (${range})`,
+    );
   }
 
   /**

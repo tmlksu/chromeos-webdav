@@ -18,8 +18,23 @@
  * ログイン処理は single-flight ゲートで 1 本に束ねる。
  */
 
+/**
+ * DavClient が渡す timeoutMs を、その 1 回の試行ぶんの signal に変える。
+ *
+ * 期限は**試行ごとに**張り直す。AccessAuth は失効を検知するとログイン
+ * (最大 90 秒) を挟んで再試行するので、同じ signal を使い回すと
+ * 再試行が必ず期限切れになる。timeoutMs 自体は fetch に渡さない
+ * (未知のフィールドは無視されるが、残しても意味が無い)。
+ */
+function withDeadline(init) {
+  const { timeoutMs, ...rest } = init;
+  if (!timeoutMs) return rest;
+  return { ...rest, signal: AbortSignal.timeout(timeoutMs) };
+}
+
 export const ACCESS_COOKIE = 'CF_Authorization';
 export const AUTH_TIMEOUT_MS = 90_000;
+export const IDENTITY_TIMEOUT_MS = 15_000;
 const IDENTITY_PATH = '/cdn-cgi/access/get-identity';
 
 export class AccessAuthError extends Error {
@@ -81,7 +96,7 @@ export class AccessAuth {
 
   _raw(url, init = {}) {
     return this.fetchImpl(url, {
-      ...init,
+      ...withDeadline(init),
       credentials: 'include',
       redirect: 'manual',
     });
@@ -108,7 +123,11 @@ export class AccessAuth {
   async ensureAuthenticated() {
     let response;
     try {
-      response = await this._raw(`${this.origin}${IDENTITY_PATH}`, { method: 'GET' });
+      response = await this._raw(`${this.origin}${IDENTITY_PATH}`, {
+        method: 'GET',
+        // マウント時のプリフライト。ここで刺さるとマウント操作自体が返らない
+        timeoutMs: IDENTITY_TIMEOUT_MS,
+      });
     } catch {
       // ネットワーク断はログインでは解決しない。呼び出し側で扱う。
       return false;
@@ -224,7 +243,7 @@ export class NoAuth {
   }
 
   fetch(url, init = {}) {
-    return this.fetchImpl(url, { ...init, credentials: 'omit', redirect: 'follow' });
+    return this.fetchImpl(url, { ...withDeadline(init), credentials: 'omit', redirect: 'follow' });
   }
 
   async ensureAuthenticated() {
@@ -268,7 +287,7 @@ export class BasicAuth {
 
   async fetch(url, init = {}) {
     const response = await this.fetchImpl(url, {
-      ...init,
+      ...withDeadline(init),
       credentials: 'omit',
       redirect: 'follow',
       headers: {
