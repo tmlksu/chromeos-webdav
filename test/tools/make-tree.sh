@@ -35,4 +35,9 @@ printf 'deep\n'   > "nested/deep dir/leaf.txt"
 # 途中を切り出しても正しさを判定できるように、バイト値を index から作る。
 python3 -c "open('sample-media.bin','wb').write(bytes((i*7 + (i//251)*13) % 256 for i in range(2*1024*1024)))"
 
+# コンテナは別の uid で動く (Apache は daemon、rclone は 1000 など)。
+# mktemp -d の 0700 のままだとツリーを辿れず 403 になるので、読み取りだけ全員に開ける。
+# 検証用の合成データしか置かないディレクトリなので問題無い。
+chmod -R a+rX "$DEST"
+
 echo "tree written to $DEST"

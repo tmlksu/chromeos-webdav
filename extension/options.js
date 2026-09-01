@@ -93,6 +93,12 @@ function describeError(error) {
   if (error?.status === 405) {
     return `${message}\nPROPFIND が拒否されています。WebDAV ではないか、プロキシがメソッドを塞いでいます。`;
   }
+  if (error?.status >= 500) {
+    return `${message}\nサーバか前段のプロキシ・トンネルがエラーを返しています。オリジンが動いているか確認してください。`;
+  }
+  if (error?.name === 'DavTimeoutError') {
+    return `${message}\n応答がありません。サーバか経路 (トンネル・プロキシ) が止まっている可能性があります。`;
+  }
   if (/Failed to fetch|NetworkError/i.test(message)) {
     return `${message}\nURL・証明書・CORS 以前の到達性を確認してください。`;
   }

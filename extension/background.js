@@ -13,7 +13,8 @@
 
 import { DavClient, DavHttpError } from './dav.js';
 import { CachedDavClient } from './cache.js';
-import { createAuth, AccessAuthError, BasicAuthError } from './auth.js';
+import { createAuth } from './auth.js';
+import { toProviderError } from './errors.js';
 import { ShareStore } from './config.js';
 
 const OPEN_FILES_KEY = 'openFiles';
@@ -94,21 +95,6 @@ async function forgetShareOpenFiles(fileSystemId) {
     if (key.startsWith(`${fileSystemId}:`)) openFiles.delete(key);
   }
   await persistOpenFiles();
-}
-
-// --- エラー写像 --------------------------------------------------------------
-
-/** @returns {chrome.fileSystemProvider.ProviderError} */
-function toProviderError(error) {
-  if (error instanceof DavHttpError) {
-    if (error.status === 404) return 'NOT_FOUND';
-    // 401 は資格情報が違う。Access の場合はここに来る前に auth.js が処理している。
-    if (error.status === 401 || error.status === 403) return 'ACCESS_DENIED';
-    if (error.status === 405 || error.status === 501) return 'INVALID_OPERATION';
-  }
-  if (error instanceof BasicAuthError) return 'ACCESS_DENIED';
-  if (error instanceof AccessAuthError) return 'FAILED';
-  return 'FAILED';
 }
 
 /** ハンドラを Promise ベースで書けるようにするラッパ。 */

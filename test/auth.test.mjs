@@ -8,6 +8,7 @@ import {
   AccessAuth,
   AccessAuthError,
   BasicAuth,
+  NoAuth,
   BasicAuthError,
   basicCredentials,
   createAuth,
@@ -331,4 +332,43 @@ test('createAuth: authMode basic で BasicAuth を返し、資格情報を渡す
   assert.ok(auth instanceof BasicAuth);
   await auth.fetch(`${ORIGIN}/`);
   assert.equal(calls[0].init.headers.Authorization, `Basic ${basicCredentials('u', 'p')}`);
+});
+
+// --- 期限の張り直し ----------------------------------------------------------
+
+test('AccessAuth: ログインを挟んだ再試行に新しい期限が張られる', async () => {
+  // 同じ signal を使い回すと、ログイン待ち (最大 90 秒) の間に期限が切れ、
+  // 再試行が必ず中断される。試行ごとに張り直していることを確かめる。
+  const { cookies, tabs, completeLogin } = makeStubs();
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push(init.signal);
+    return seen.length === 1 ? redirected() : ok();
+  };
+
+  const auth = new AccessAuth(ORIGIN, { deps: { fetch: fetchImpl, tabs, cookies } });
+  const pending = auth.fetch(`${ORIGIN}/dir`, { timeoutMs: 30_000 });
+  await Promise.resolve();
+  completeLogin();
+  await pending;
+
+  assert.equal(seen.length, 2);
+  assert.ok(seen[0] instanceof AbortSignal);
+  assert.ok(seen[1] instanceof AbortSignal);
+  assert.notEqual(seen[0], seen[1], '再試行が同じ signal を使い回していない');
+});
+
+test('timeoutMs は fetch にそのまま渡さない', async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const auth = new BasicAuth(ORIGIN, { username: 'u', password: 'p', deps: { fetch: fetchImpl } });
+  await auth.fetch(`${ORIGIN}/`, { timeoutMs: 1000 });
+  assert.equal(calls[0].init.timeoutMs, undefined);
+  assert.ok(calls[0].init.signal instanceof AbortSignal);
+});
+
+test('timeoutMs が無ければ signal も足さない', async () => {
+  const { calls, fetchImpl } = recordingFetch();
+  const auth = new NoAuth(ORIGIN, { deps: { fetch: fetchImpl } });
+  await auth.fetch(`${ORIGIN}/`, {});
+  assert.equal(calls[0].init.signal, undefined);
 });
