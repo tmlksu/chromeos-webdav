@@ -11,6 +11,7 @@
     "fixtures": "bash test/tools/make-fixtures.sh",
     "check": "for f in extension/*.js; do node --check \"$f\" || exit 1; done && node test/tools/check-manifest.mjs",
     "package": "node test/tools/package.mjs",
-    "test:compat": "bash test/tools/compat.sh"
+    "test:compat": "bash test/tools/compat.sh",
+    "icons": "node test/tools/make-icons.mjs"
   }
 }

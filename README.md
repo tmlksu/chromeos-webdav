@@ -143,6 +143,7 @@ npm test        # unit tests (no chrome APIs needed)
 npm run check   # syntax check + manifest.json validation
 npm run package # build dist/webdav-for-files-<version>.zip
 
+npm run icons               # regenerate extension/icons/*.png (writes PNG directly, no deps)
 npm run fixtures            # regenerate fixtures from rclone's real output
 npm run test:compat         # compatibility test across WebDAV implementations (docker)
 node test/live.mjs <URL>    # integration test against a running server
