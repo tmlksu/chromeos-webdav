@@ -135,6 +135,7 @@ npm test        # ユニットテスト (chrome API 不要)
 npm run check   # 構文チェック + manifest.json の妥当性
 npm run package # dist/webdav-for-files-<version>.zip を作る
 
+npm run icons               # extension/icons/*.png を作り直す (依存ゼロで PNG を直接書く)
 npm run fixtures            # fixture を rclone の実出力から再生成する
 npm run test:compat         # 複数の WebDAV 実装に対する互換テスト (docker)
 node test/live.mjs <URL>    # 稼働中のサーバに対する結合テスト

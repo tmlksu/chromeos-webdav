@@ -25,12 +25,24 @@ if (!/^\d+(\.\d+){0,3}$/.test(manifest.version || '')) {
   problems.push(`version は数字とドットだけで構成すること: ${manifest.version}`);
 }
 
+// ウェブストアは 128x128 を必須にしている
+if (!manifest.icons?.['128']) {
+  problems.push('icons に 128 が無い (ウェブストア掲載に必須)');
+}
+
 if (manifest.manifest_version !== 3) {
   problems.push(`manifest_version は 3 であること: ${manifest.manifest_version}`);
 }
 
 // manifest が名前で参照しているファイルが実在するか。リネーム時に効く。
-const referenced = [manifest.background?.service_worker, manifest.options_page].filter(Boolean);
+// アイコンは生成物なので、作り忘れたまま package される事故がいちばん起きやすい。
+// icons と action.default_icon は同じパスを指すので、重複は畳んでから見る
+const referenced = [...new Set([
+  manifest.background?.service_worker,
+  manifest.options_page,
+  ...Object.values(manifest.icons || {}),
+  ...Object.values(manifest.action?.default_icon || {}),
+].filter(Boolean))];
 for (const name of referenced) {
   try {
     await access(join(SRC, name));
