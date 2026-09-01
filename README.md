@@ -250,10 +250,13 @@ Recorded so that anyone reimplementing this doesn't fall into the same traps.
 
 ## Documentation
 
+- [PRIVACY.md](PRIVACY.md) — what is stored and what is sent (English and Japanese)
+
 `docs/` is currently Japanese-only:
 
 - [docs/cloudflare-access.md](docs/cloudflare-access.md) — putting the server behind Cloudflare Access
 - [docs/troubleshooting.md](docs/troubleshooting.md) — troubleshooting
+- [docs/webstore-submission.md](docs/webstore-submission.md) — draft copy for the Chrome Web Store listing
 
 ## License
 
